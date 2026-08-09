@@ -54,8 +54,9 @@ flowchart TB
 
 | Area | Status | Key files / routes |
 |------|--------|-------------------|
-| Landing + marketing | Done | `src/routes/index.tsx` |
+| Landing + marketing | Done | `src/routes/index.tsx`, `site-assets.ts` |
 | Live desk map | Done | `LiveDeskMap.tsx`, `listPublicDesks` |
+| Global pricing (`pricing_settings`) | Done | `getPublicPricing`, `/admin/pricing`, landing `#pricing` |
 | User booking (pending/unpaid) | Done | `createUserBooking`, `BookingDialog.tsx` |
 | Account: profile | Done | `account.tsx`, `updateMyProfile` |
 | Account: my bookings + cancel | Done | `account.tsx`, `cancelMyBooking` |
@@ -102,8 +103,10 @@ For architecture detail see [ARCHITECTURE.md](./ARCHITECTURE.md). For local setu
 | `listPublicDesks` (no auth) | Done | `booking.functions.ts` |
 | Display status: free / held / busy | Done | `mapPublicDesk()`, `LiveDeskMap.tsx` |
 | Pass selected desk into booking | Done | `useBooking().open({ desk, type? })` |
+| Scroll-to-map funnel on landing | Done | `scrollToLiveMap()`, `prepareTier()`, header/hero/pricing CTAs |
+| Preferred tier banner on map | Done | `LiveDeskMap.tsx` when `prepareTier()` was used |
 
-**Acceptance:** Admin desk/rate changes and new bookings affect map after re-fetch.
+**Acceptance:** Admin desk/rate changes and new bookings affect map after re-fetch. Landing CTAs scroll to `#desks`; dialog opens only after desk selection on the map (or from non-landing header).
 
 ### Milestone A3 — Wire booking dialog to database
 
@@ -283,7 +286,7 @@ Read this before production deploy or exposing the app to real members.
 ### Booking and UX
 
 - **Timezone:** Business hours use Iran offset **+03:30** hardcoded in `booking.service.ts`. Other regions or DST need code changes.
-- **Pricing mismatch:** Landing page **Pricing** section (`index.tsx`) shows marketing numbers (e.g. 90k/hour) while real rates come from the `desks` table. Users may see different prices on the map vs pricing section.
+- **Pricing:** Landing `#pricing`, booking dialog defaults, and admin **تعرفه‌ها** read from `pricing_settings`. Per-desk rates on `desks` can still differ — map and dialog show the selected desk’s rates.
 - **Desk `status` vs bookings:** Map computes availability from bookings; manual `desks.status` (maintenance) also affects display. Staff should keep desk records consistent.
 - **MVP flow:** Bookings are `pending` until staff confirms or payment completes — members must understand «در انتظار تأیید».
 
@@ -385,7 +388,9 @@ Parallel work: documentation (this file), branding cleanup, E2E tests can start 
 | Payment | `src/lib/payment.server.ts`, `src/lib/payment.functions.ts`, `src/routes/api/payment/callback.tsx` |
 | Wallet | `src/lib/wallet.functions.ts` |
 | Door | `src/lib/door.functions.ts` |
-| UI: map + book | `LiveDeskMap.tsx`, `BookingDialog.tsx` |
+| UI: map + book | `LiveDeskMap.tsx`, `BookingDialog.tsx`, `scroll-to-live-map.ts` |
+| UI: landing pricing | `index.tsx` (`#pricing`), `getPublicPricing` |
+| Admin pricing | `admin/pricing.tsx`, `pricing_settings` table |
 | UI: account / dashboard | `account.tsx`, `dashboard.tsx` |
 | Workers | `services/notification-worker/`, `apps/telegram-bot/` |
 | Schema | `supabase/migrations/` |

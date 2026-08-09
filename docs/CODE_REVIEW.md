@@ -152,7 +152,6 @@ Most items addressed in subsequent implementation — see resolution table below
 2. Payment gateway production config + `SITE_URL` callback.
 3. Atomic wallet transactions; secure Telegram link flow.
 4. Add tests for `normalizePhone`, `consumeOtp`, overlap logic, payment callback.
-5. Align landing Pricing section with `desks` table rates.
 
 ---
 
@@ -166,7 +165,7 @@ Most items addressed in subsequent implementation — see resolution table below
 | 4 | `issueSessionToken` always `createUser` | **Fixed** | Handles existing users in `auth.server.ts` |
 | 5 | `.env` not gitignored | **Fixed** | `.gitignore` updated |
 | 6 | Admin lacks explicit staff checks | **Fixed** | `requireStaff()` on admin handlers |
-| 7 | Price inconsistency across UI | **Partial** | Booking uses desk rates; landing Pricing section still marketing numbers |
+| 7 | Price inconsistency across UI | **Fixed** | Landing `#pricing` + dialog use `pricing_settings`; per-desk overrides on `desks` |
 | 8 | Static desk map | **Fixed** | `LiveDeskMap.tsx` + `listPublicDesks` |
 | 9 | No payment integration | **Partial** | Zarinpal scaffold + account pay button |
 | 10 | Major features missing | **Partial** | Wallet/door/Telegram scaffolded — see ROADMAP |

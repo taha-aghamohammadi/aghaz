@@ -30,7 +30,7 @@ cp .env.example .env
 npm run dev
 ```
 
-Default dev URL: http://localhost:5173
+Default dev URL: http://127.0.0.1:5175 (`vite dev --host 127.0.0.1 --port 5175` in `package.json`)
 
 ## Production build
 

@@ -11,7 +11,7 @@ cp .env.example .env
 npm run dev
 ```
 
-Open http://localhost:5173
+Open http://127.0.0.1:5175 (see `npm run dev` in `package.json`)
 
 ## Production (Node)
 
@@ -56,6 +56,8 @@ Never commit `.env` or expose the service role key to the browser.
 | `npm run lint` | ESLint |
 | `npm run db:push` | Push Supabase migrations |
 | `npm run grant-admin` | Grant admin/staff by phone (`--phone`, optional `--role`) |
+| `npm run audit:booking` | Playwright check: landing scroll funnel + pricing section |
+| `npm run audit:navbar` | Playwright check: header/nav at common breakpoints |
 
 ## Stack
 

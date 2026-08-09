@@ -272,6 +272,7 @@ Core tables (`supabase/migrations/`):
 | `phone_otps` | OTP hashes (service role only) |
 | `user_roles` | `admin`, `staff`, `user` |
 | `desks` | Inventory, rates, zones, manual status |
+| `pricing_settings` | Global hourly/daily/monthly rates (public read; staff update) |
 | `bookings` | Reservations (`desk_id`, times, status, payment_status) |
 | `transactions` | Staff finance ledger (income/expense) |
 | `payment_orders` | Zarinpal authority/ref tracking |
@@ -289,7 +290,7 @@ Core tables (`supabase/migrations/`):
 | Module | Key functions | Auth |
 | --- | --- | --- |
 | `auth.functions.ts` | `requestPhoneOtp`, `verifyPhoneOtp`, `updateMyProfile` | OTP public; profile requires auth |
-| `booking.functions.ts` | `listPublicDesks`, `checkDeskAvailability`, `createUserBooking`, `cancelMyBooking` | Public list; booking requires auth |
+| `booking.functions.ts` | `getPublicPricing`, `listPublicDesks`, `checkDeskAvailability`, `createUserBooking`, `cancelMyBooking` | Public pricing + desk list; booking requires auth |
 | `admin.functions.ts` | Overview, bookings CRUD, desks, members, roles, finance, `listMyBookings` | Auth + `requireStaff()` on staff ops |
 | `payment.functions.ts` | `createBookingPayment`, `handlePaymentCallback` | Auth; callback public route |
 | `wallet.functions.ts` | `getWalletBalance`, `payBookingFromWallet`, `adjustWalletBalance` | Auth; adjust staff-only |
@@ -301,12 +302,13 @@ Shared business logic lives in **`booking.service.ts`** (pricing, time windows, 
 
 End-to-end flow:
 
-1. **Live map** — `listPublicDesks` loads active desks + overlapping bookings; `LiveDeskMap` shows free / held / busy.
-2. **Select desk** — User opens `BookingDialog` with desk rates from DB (not hardcoded).
-3. **Auth gate** — Logged-out users redirect to `/auth` with pending booking restored from `sessionStorage`.
-4. **Create** — `createUserBooking` inserts `status: pending`, `payment_status: unpaid`, code `AGZ-*`.
-5. **Confirm** — Staff toggles confirmed/paid in admin, **or** user pays via Zarinpal / wallet on account page.
-6. **Cancel** — User can cancel own `pending` bookings.
+1. **Live map** — `listPublicDesks` loads active desks + overlapping bookings + `pricing_settings`; `LiveDeskMap` (`#desks`) shows free / held / busy.
+2. **Landing CTAs** — On `/`, header/hero/pricing «رزرو» actions call `scrollToLiveMap()`; pricing tiers call `prepareTier()` first. Dialog does not open until a desk is chosen on the map (except header on non-landing routes).
+3. **Select desk** — User opens `BookingDialog` via «رزرو این میز» with desk rates from DB (per-desk overrides or global `pricing_settings`).
+4. **Auth gate** — Logged-out users redirect to `/auth` with pending booking restored from `sessionStorage`.
+5. **Create** — `createUserBooking` inserts `status: pending`, `payment_status: unpaid`, code `AGZ-*`.
+6. **Confirm** — Staff toggles confirmed/paid in admin, **or** user pays via Zarinpal / wallet on account page.
+7. **Cancel** — User can cancel own `pending` bookings.
 
 Overlap prevention: application query in `isDeskAvailable()` + SQL `is_desk_available()`.
 

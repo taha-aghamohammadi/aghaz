@@ -21,7 +21,7 @@ cp .env.example .env
 npm run dev
 ```
 
-Open http://localhost:8080 (port may vary; check terminal output).
+Open http://127.0.0.1:5175 (configured in `package.json`; override with `vite dev --port …`).
 
 ### Scripts
 
@@ -35,6 +35,8 @@ Open http://localhost:8080 (port may vary; check terminal output).
 | `npm run format` | Prettier write |
 | `npm run db:push` | Push migrations to linked Supabase project (needs `SUPABASE_DB_PASSWORD`) |
 | `npm run grant-admin` | Grant `admin` or `staff` role by phone (needs service role key) |
+| `npm run audit:booking` | Playwright: landing scroll funnel, `#desks` / `#pricing`, no duplicate `#spaces` |
+| `npm run audit:navbar` | Playwright: header layout at 768 / 1024 / 1280px |
 
 ## Environment setup
 
@@ -44,13 +46,13 @@ Copy [.env.example](../.env.example) to `.env`:
 # Client (Vite)
 VITE_SUPABASE_URL=https://<project>.supabase.co
 VITE_SUPABASE_PUBLISHABLE_KEY=sb_publishable_...
-VITE_SITE_URL=http://localhost:8080
+VITE_SITE_URL=http://127.0.0.1:5175
 
 # Server
 SUPABASE_URL=https://<project>.supabase.co
 SUPABASE_PUBLISHABLE_KEY=sb_publishable_...
 SUPABASE_SERVICE_ROLE_KEY=sb_secret_...
-SITE_URL=http://localhost:8080
+SITE_URL=http://127.0.0.1:5175
 
 # Optional — Phase B+
 KAVENEGAR_API_KEY=
@@ -150,6 +152,44 @@ For booking-related logic, extend **`booking.service.ts`** rather than duplicati
 - shadcn primitives: `src/components/ui/`
 - Product UI: `src/components/site/`
 - Theme tokens: `src/styles.css`
+- Marketing images: `src/assets/` (bundled via `src/lib/site-assets.ts`)
+- Public contact mailto: `src/lib/site-contact.ts` (`info@aghaz.ir`)
+
+### Landing page and booking funnel
+
+On `/`, most «رزرو» CTAs **scroll to the live map** (`#desks`) instead of opening the dialog immediately:
+
+| CTA location | Behavior on `/` |
+| --- | --- |
+| Header «رزرو میز» | `scrollToLiveMap()` |
+| Hero / bottom CTA | `scrollToLiveMap()` |
+| Pricing tier buttons | `prepareTier(type)` then scroll to map |
+| Live map «رزرو این میز» | `useBooking().open({ desk, type? })` → dialog |
+
+On other routes (e.g. `/brand`), header «رزرو میز» still opens `BookingDialog` directly.
+
+Helpers:
+
+- `src/lib/scroll-to-live-map.ts` — smooth scroll with sticky-header offset (`scroll-mt-24` on `#desks`)
+- `BookingDialog` provider — `prepareTier()` sets preferred hourly/daily/monthly before desk selection
+
+Section anchors on landing: `#gallery`, `#desks`, `#pricing` (no separate `#spaces` section).
+
+Global rates for landing tiers and booking defaults come from **`pricing_settings`** (`getPublicPricing`, `fetchPricingSettings` in `booking.service.ts`). Per-desk overrides remain on the `desks` table.
+
+### Playwright audits (optional)
+
+`playwright` is a devDependency. First run: `npx playwright install chromium`.
+
+```sh
+npm run dev
+npm run audit:booking    # APP_URL defaults to http://127.0.0.1:5175
+npm run audit:navbar
+node scripts/ui-audit.mjs           # screenshots → .ui-audit/
+node scripts/admin-pricing-audit.mjs  # /admin/pricing (needs staff session or shows access denied)
+```
+
+Set `APP_URL` if the dev server uses a different host or port.
 
 ### Supabase clients
 
