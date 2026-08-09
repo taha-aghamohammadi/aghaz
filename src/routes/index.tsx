@@ -1,4 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
+import { useEffect } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 import {
@@ -30,10 +31,12 @@ import { SiteFooter } from "@/components/site/SiteFooter";
 import { BookingProvider, useBooking, type BookingType } from "@/components/site/BookingDialog";
 import { LiveDeskMap } from "@/components/site/LiveDeskMap";
 import { getPublicPricing } from "@/lib/booking.functions";
-import { DEFAULT_PRICING, unitPriceForType } from "@/lib/booking.service";
+import { DEFAULT_PRICING, unitPriceForType, type PricingTiers } from "@/lib/booking.service";
 import { pricingMainAmount, pricingUnitLabel } from "@/lib/fa-format";
 import { Toaster } from "@/components/ui/sonner";
-import { logo, spaceImages } from "@/lib/site-assets";
+import { spaceImages } from "@/lib/site-assets";
+import { SITE_CONTACT_MAILTO } from "@/lib/site-contact";
+import { scrollToLiveMap } from "@/lib/scroll-to-live-map";
 
 export const Route = createFileRoute("/")({
   head: () => ({
@@ -58,6 +61,19 @@ export const Route = createFileRoute("/")({
 });
 
 function Landing() {
+  const fetchPricing = useServerFn(getPublicPricing);
+  const { data: pricing = DEFAULT_PRICING } = useQuery({
+    queryKey: ["public-pricing"],
+    queryFn: () => fetchPricing(),
+  });
+  const tiers = buildLandingTiers(pricing);
+
+  useEffect(() => {
+    if (window.location.hash === "#desks") {
+      requestAnimationFrame(() => scrollToLiveMap());
+    }
+  }, []);
+
   return (
     <div className="min-h-screen bg-background text-foreground">
       <BookingProvider>
@@ -66,12 +82,11 @@ function Landing() {
           <Hero />
           <LogosStrip />
           <Features />
-          <Spaces />
           <Gallery />
           <HowItWorks />
           <LiveDeskMap />
+          <Pricing tiers={tiers} />
           <Testimonials />
-          <Pricing />
           <FAQ />
           <CTA />
         </main>
@@ -82,10 +97,58 @@ function Landing() {
   );
 }
 
+type LandingTier = {
+  name: string;
+  type: BookingType;
+  desc: string;
+  price: string;
+  unit: string;
+  tint: string;
+  features: string[];
+  featured?: boolean;
+};
+
+function buildLandingTiers(pricing: PricingTiers): LandingTier[] {
+  return [
+    {
+      name: "میز ساعتی",
+      type: "hourly",
+      desc: "هر وقت لازم داری بیا، فقط بابت ساعت‌های استفاده پرداخت کن.",
+      price: pricingMainAmount(unitPriceForType(pricing, "hourly")),
+      unit: pricingUnitLabel(unitPriceForType(pricing, "hourly"), "hour"),
+      tint: "from-primary/20",
+      features: ["دسترسی به میز آزاد", "کافه اختصاصی", "درب هوشمند", "پرداخت آنلاین"],
+    },
+    {
+      name: "میز روزانه",
+      type: "daily",
+      desc: "یک روز کامل کار، تعرفه ثابت و بی‌دغدغه.",
+      price: pricingMainAmount(unitPriceForType(pricing, "daily")),
+      unit: pricingUnitLabel(unitPriceForType(pricing, "daily"), "day"),
+      tint: "from-primary/15",
+      features: ["میز آزاد تمام روز", "کافه اختصاصی", "درب هوشمند", "تمدید آسان"],
+    },
+    {
+      name: "اشتراک ماهانه",
+      type: "monthly",
+      desc: "دسترسی نامحدود به میز اشتراکی، در تمام ساعات کاری.",
+      price: pricingMainAmount(unitPriceForType(pricing, "monthly")),
+      unit: pricingUnitLabel(unitPriceForType(pricing, "monthly"), "month"),
+      tint: "from-primary/25",
+      features: [
+        "استفاده نامحدود از میز آزاد",
+        "اولویت در رزرو",
+        "کافه اختصاصی",
+        "پاس مهمان",
+      ],
+      featured: true,
+    },
+  ];
+}
+
 /* ---------- HERO ---------- */
 
 function Hero() {
-  const { open } = useBooking();
   return (
     <section className="relative overflow-hidden border-b border-hairline">
       <div className="absolute inset-0 hero-glow opacity-70" />
@@ -112,8 +175,12 @@ function Hero() {
             یا ماهانه رزرو کن — پرداخت، ورود و مدیریت کاملاً آنلاین.
           </p>
           <div className="mt-9 flex flex-col items-center justify-center gap-3 sm:flex-row">
-            <Button size="lg" onClick={() => open()} className="h-12 rounded-full px-6 text-[14px]">
-              رزرو میز
+            <Button
+              size="lg"
+              className="h-12 rounded-full px-6 text-[14px]"
+              onClick={() => scrollToLiveMap()}
+            >
+              انتخاب میز
               <ArrowLeft className="mr-1.5 h-4 w-4" />
             </Button>
             <Button size="lg" variant="outline" asChild className="h-12 rounded-full border-hairline bg-background/60 px-6 text-[14px] backdrop-blur">
@@ -126,27 +193,8 @@ function Hero() {
             <span className="inline-flex items-center gap-1.5"><Check className="h-3.5 w-3.5 text-primary" /> لغو هر زمان</span>
           </div>
         </div>
-
-        <HeroPreview />
       </div>
     </section>
-  );
-}
-
-function HeroPreview() {
-  return (
-    <div className="relative mx-auto mt-16 max-w-5xl">
-      <div className="absolute inset-x-10 -top-4 h-16 rounded-t-3xl bg-gradient-to-b from-primary/10 to-transparent blur-2xl" />
-      <div className="relative overflow-hidden rounded-2xl border border-hairline bg-card shadow-[0_30px_80px_-20px_rgba(0,0,0,0.18)]">
-        <img
-          src={spaceImages.space1}
-          alt="نمای فضای کار اشتراکی آغاز با میزهای اشتراکی و نور طبیعی"
-          width={1600}
-          height={1104}
-          className="h-full w-full object-cover"
-        />
-      </div>
-    </div>
   );
 }
 
@@ -154,8 +202,7 @@ function HeroPreview() {
 
 function Gallery() {
   const photos = [
-    { src: spaceImages.space1, alt: "سالن اصلی فضای کار اشتراکی آغاز", w: 1600, h: 1104, cls: "sm:col-span-2 sm:row-span-2" },
-    { src: spaceImages.space4, alt: "میزهای کنار پنجره در فضای ساکت", w: 1200, h: 1600, cls: "sm:row-span-2" },
+    { src: spaceImages.space4, alt: "میزهای کنار پنجره در فضای ساکت", w: 1200, h: 1600, cls: "sm:col-span-2 sm:row-span-2" },
     { src: spaceImages.space3, alt: "لانج و کافه فضای کار آغاز", w: 1200, h: 1200, cls: "" },
     { src: spaceImages.space2, alt: "جزئیات میز اشتراکی آماده کار", w: 1200, h: 1200, cls: "" },
     { src: spaceImages.space5, alt: "ورودی و پذیرش فضای کار آغاز", w: 1600, h: 1104, cls: "sm:col-span-2" },
@@ -255,79 +302,61 @@ function Features() {
   );
 }
 
-/* ---------- SPACES ---------- */
+/* ---------- PRICING (merged plans + tiers) ---------- */
 
-function Spaces() {
-  const { open } = useBooking();
-  const fetchPricing = useServerFn(getPublicPricing);
-  const { data: pricing = DEFAULT_PRICING } = useQuery({
-    queryKey: ["public-pricing"],
-    queryFn: () => fetchPricing(),
-  });
+function Pricing({ tiers }: { tiers: LandingTier[] }) {
+  const { prepareTier } = useBooking();
 
-  const items: {
-    name: string;
-    type: BookingType;
-    desc: string;
-    price: string;
-    unit: string;
-    tint: string;
-    featured?: boolean;
-  }[] = [
-    {
-      name: "میز ساعتی",
-      type: "hourly",
-      desc: "هر وقت لازم داری بیا، فقط بابت ساعت‌های استفاده پرداخت کن.",
-      price: pricingMainAmount(unitPriceForType(pricing, "hourly")),
-      unit: pricingUnitLabel(unitPriceForType(pricing, "hourly"), "hour"),
-      tint: "from-primary/20",
-    },
-    {
-      name: "میز روزانه",
-      type: "daily",
-      desc: "یک روز کامل کار، تعرفه ثابت و بی‌دغدغه.",
-      price: pricingMainAmount(unitPriceForType(pricing, "daily")),
-      unit: pricingUnitLabel(unitPriceForType(pricing, "daily"), "day"),
-      tint: "from-cyan-500/20",
-    },
-    {
-      name: "اشتراک ماهانه",
-      type: "monthly",
-      desc: "دسترسی نامحدود به میز اشتراکی، در تمام ساعات کاری.",
-      price: pricingMainAmount(unitPriceForType(pricing, "monthly")),
-      unit: pricingUnitLabel(unitPriceForType(pricing, "monthly"), "month"),
-      tint: "from-blue-500/25",
-      featured: true,
-    },
-  ];
+  function selectTierAndScroll(type: BookingType) {
+    prepareTier(type);
+    scrollToLiveMap();
+  }
+
   return (
-    <section id="spaces" className="border-b border-hairline bg-surface/40 py-24 md:py-32">
+    <section id="pricing" className="border-b border-hairline bg-surface/40 py-24 md:py-32">
       <div className="mx-auto max-w-7xl px-6">
-        <SectionHeader eyebrow="میز اشتراکی" title="به اندازه‌ی کارت انتخاب کن." subtitle="از یک ساعت تا یک ماه — فقط بابت اون چیزی که استفاده می‌کنی پرداخت کن." />
+        <SectionHeader
+          eyebrow="میز اشتراکی · قیمت‌ها"
+          title="به اندازه‌ی کارت انتخاب کن."
+          subtitle="از یک ساعت تا یک ماه — ساده، شفاف و بدون هزینه پنهان."
+        />
         <div className="mt-14 grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
-          {items.map((s) => (
-            <div key={s.name} className={`group relative overflow-hidden rounded-2xl border ${s.featured ? "border-primary/40" : "border-hairline"} bg-card p-1`}>
-              <div className={`relative h-40 overflow-hidden rounded-xl bg-gradient-to-br ${s.tint} to-transparent`}>
+          {tiers.map((t) => (
+            <div
+              key={t.name}
+              className={`group relative overflow-hidden rounded-2xl border ${
+                t.featured
+                  ? "border-primary/40 shadow-[0_30px_80px_-30px_color-mix(in_oklch,var(--primary)_35%,transparent)]"
+                  : "border-hairline"
+              } bg-card p-1`}
+            >
+              <div className={`relative h-32 overflow-hidden rounded-xl bg-gradient-to-br ${t.tint} to-transparent`}>
                 <div className="absolute inset-0 grid-bg opacity-40" />
                 <div className="absolute left-3 top-3 rounded-full border border-hairline bg-background/80 px-2 py-0.5 text-[10px] backdrop-blur">
-                  {s.featured ? "محبوب‌ترین" : "موجود"}
-                </div>
-                <div className="absolute inset-x-0 bottom-0 flex items-end justify-center p-6">
-                  <div className="h-20 w-40 rounded-t-2xl border-x border-t border-hairline bg-background/70 backdrop-blur" />
+                  {t.featured ? "محبوب‌ترین" : "موجود"}
                 </div>
               </div>
               <div className="p-5">
-                <div className="flex items-baseline justify-between gap-3">
-                  <h3 className="text-[16px] font-semibold">{s.name}</h3>
-                  <div className="text-left">
-                    <span className="text-xs text-muted-foreground">از </span>
-                    <span className="text-[15px] font-semibold">{s.price}</span>
-                    <span className="text-xs text-muted-foreground"> {s.unit}</span>
-                  </div>
+                <h3 className="text-[16px] font-semibold">{t.name}</h3>
+                <div className="mt-2 flex items-baseline gap-1.5">
+                  <span className="text-3xl font-semibold tracking-tight">{t.price}</span>
+                  <span className="text-[13px] text-muted-foreground">{t.unit}</span>
                 </div>
-                <p className="mt-1 text-[13.5px] text-muted-foreground">{s.desc}</p>
-                <Button onClick={() => open({ type: s.type })} variant={s.featured ? "default" : "outline"} className="mt-4 w-full rounded-full">
-                  رزرو کن
+                <p className="mt-1 text-[13.5px] text-muted-foreground">{t.desc}</p>
+                <ul className="mt-4 space-y-2">
+                  {t.features.map((f) => (
+                    <li key={f} className="flex items-center gap-2 text-[13px] text-muted-foreground">
+                      <Check className="h-3.5 w-3.5 shrink-0 text-primary" />
+                      <span>{f}</span>
+                    </li>
+                  ))}
+                </ul>
+                <Button
+                  onClick={() => selectTierAndScroll(t.type)}
+                  variant={t.featured ? "default" : "outline"}
+                  className="mt-5 w-full rounded-full"
+                >
+                  انتخاب میز با این پلن
                   <ArrowLeft className="mr-1 h-4 w-4" />
                 </Button>
               </div>
@@ -443,100 +472,6 @@ function Testimonials() {
   );
 }
 
-/* ---------- PRICING ---------- */
-
-function Pricing() {
-  const { open } = useBooking();
-  const fetchPricing = useServerFn(getPublicPricing);
-  const { data: pricing = DEFAULT_PRICING } = useQuery({
-    queryKey: ["public-pricing"],
-    queryFn: () => fetchPricing(),
-  });
-
-  const tiers: {
-    name: string;
-    type: BookingType;
-    price: string;
-    unit: string;
-    desc: string;
-    features: string[];
-    featured?: boolean;
-  }[] = [
-    {
-      name: "ساعتی",
-      type: "hourly",
-      price: pricingMainAmount(unitPriceForType(pricing, "hourly")),
-      unit: pricingUnitLabel(unitPriceForType(pricing, "hourly"), "hour"),
-      desc: "هر وقت خواستی بیا.",
-      features: ["دسترسی به میز آزاد", "کافه اختصاصی", "درب هوشمند", "پرداخت آنلاین"],
-    },
-    {
-      name: "روزانه",
-      type: "daily",
-      price: pricingMainAmount(unitPriceForType(pricing, "daily")),
-      unit: pricingUnitLabel(unitPriceForType(pricing, "daily"), "day"),
-      desc: "یک روز کامل، تعرفه ثابت.",
-      features: ["میز آزاد تمام روز", "کافه اختصاصی", "درب هوشمند", "تمدید آسان"],
-    },
-    {
-      name: "اشتراک ماهانه",
-      type: "monthly",
-      price: pricingMainAmount(unitPriceForType(pricing, "monthly")),
-      unit: pricingUnitLabel(unitPriceForType(pricing, "monthly"), "month"),
-      desc: "دسترسی نامحدود در ساعات کاری.",
-      features: [
-        "استفاده نامحدود از میز آزاد",
-        "اولویت در رزرو",
-        "کافه اختصاصی",
-        "پاس مهمان",
-      ],
-      featured: true,
-    },
-  ];
-  return (
-    <section id="pricing" className="border-b border-hairline bg-surface/40 py-24 md:py-32">
-      <div className="mx-auto max-w-7xl px-6">
-        <SectionHeader eyebrow="قیمت‌ها" title="ساده، شفاف و انعطاف‌پذیر." subtitle="بدون قرارداد. بدون هزینه پنهان. هر زمان لغو کن." />
-        <div className="mt-14 grid gap-5 md:grid-cols-3">
-          {tiers.map((t) => (
-            <div
-              key={t.name}
-              className={`relative flex flex-col rounded-2xl border p-6 ${
-                t.featured
-                  ? "border-primary/50 bg-card shadow-[0_30px_80px_-30px_rgba(37,99,235,0.35)]"
-                  : "border-hairline bg-card"
-              }`}
-            >
-              {t.featured && (
-                <div className="absolute -top-3 right-6 rounded-full bg-primary px-2.5 py-0.5 text-[10.5px] font-medium text-primary-foreground">
-                  محبوب‌ترین
-                </div>
-              )}
-              <div className="text-[13px] font-medium text-muted-foreground">{t.name}</div>
-              <div className="mt-3 flex items-baseline gap-1.5">
-                <span className="text-4xl font-semibold tracking-tight">{t.price}</span>
-                <span className="text-[13px] text-muted-foreground">{t.unit}</span>
-              </div>
-              <div className="mt-1 text-[13px] text-muted-foreground">{t.desc}</div>
-              <Button onClick={() => open({ type: t.type })} className={`mt-6 rounded-full ${t.featured ? "" : "bg-foreground text-background hover:bg-foreground/90"}`}>
-                {t.featured ? "شروع اشتراک" : "شروع کن"}
-              </Button>
-              <ul className="mt-6 space-y-2.5">
-                {t.features.map((f) => (
-                  <li key={f} className="flex items-center gap-2 text-[13.5px]">
-                    <Check className="h-4 w-4 text-primary" />
-                    <span>{f}</span>
-                  </li>
-                ))}
-              </ul>
-            </div>
-          ))}
-        </div>
-      </div>
-    </section>
-  );
-}
-
 /* ---------- FAQ ---------- */
 
 function FAQ() {
@@ -577,7 +512,6 @@ function FAQ() {
 /* ---------- CTA ---------- */
 
 function CTA() {
-  const { open } = useBooking();
   return (
     <section className="relative overflow-hidden py-24 md:py-32">
       <div className="absolute inset-0 hero-glow opacity-60" />
@@ -590,11 +524,12 @@ function CTA() {
           به آغاز بپیوند و کار اشتراکی رو همون‌طوری تجربه کن که باید باشه — هوشمند، آروم و بی‌دردسر.
         </p>
         <div className="mt-8 flex flex-col items-center justify-center gap-3 sm:flex-row">
-          <Button size="lg" onClick={() => open()} className="h-12 rounded-full px-6">
-            رزرو میز <ArrowLeft className="mr-1 h-4 w-4" />
+          <Button size="lg" className="h-12 rounded-full px-6" onClick={() => scrollToLiveMap()}>
+            انتخاب میز
+            <ArrowLeft className="mr-1 h-4 w-4" />
           </Button>
-          <Button size="lg" variant="outline" className="h-12 rounded-full border-hairline bg-background/70 px-6 backdrop-blur">
-            صحبت با ما
+          <Button size="lg" variant="outline" asChild className="h-12 rounded-full border-hairline bg-background/70 px-6 backdrop-blur">
+            <a href={SITE_CONTACT_MAILTO}>صحبت با ما</a>
           </Button>
         </div>
       </div>

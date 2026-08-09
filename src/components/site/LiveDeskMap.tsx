@@ -9,7 +9,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
-import { useBooking } from "@/components/site/BookingDialog";
+import { useBooking, type BookingType } from "@/components/site/BookingDialog";
 import { listPublicDesks, type PublicDesk } from "@/lib/booking.functions";
 import { DEFAULT_PRICING, unitPriceForType, type PricingTiers } from "@/lib/booking.service";
 import { toman, toFa } from "@/lib/fa-format";
@@ -24,8 +24,14 @@ function Legend({ color, label }: { color: string; label: string }) {
   );
 }
 
+const TIER_LABELS: Record<BookingType, string> = {
+  hourly: "ساعتی",
+  daily: "روزانه",
+  monthly: "ماهانه",
+};
+
 export function LiveDeskMap() {
-  const { open } = useBooking();
+  const { open, preferredType } = useBooking();
   const fetchDesks = useServerFn(listPublicDesks);
   const [desks, setDesks] = useState<PublicDesk[]>([]);
   const [pricing, setPricing] = useState<PricingTiers>(DEFAULT_PRICING);
@@ -56,7 +62,7 @@ export function LiveDeskMap() {
   const meta = selected ? DESK_DISPLAY_META[selected.displayStatus] : null;
 
   return (
-    <section className="border-b border-hairline bg-surface/40 py-24 md:py-32">
+    <section id="desks" className="scroll-mt-24 border-b border-hairline bg-surface/40 py-24 md:py-32">
       <div className="mx-auto max-w-7xl px-6">
         <div className="grid gap-10 md:grid-cols-[0.85fr_1.15fr] md:items-center">
           <div>
@@ -79,6 +85,11 @@ export function LiveDeskMap() {
               <Legend color="bg-warning" label="رزرو شده" />
               <Legend color="bg-destructive" label="پر" />
             </div>
+            {preferredType && (
+              <p className="mt-6 rounded-2xl border border-primary/30 bg-primary/10 px-4 py-3 text-[13px] text-foreground">
+                پلن {TIER_LABELS[preferredType]} انتخاب شد — یک میز آزاد را انتخاب کنید.
+              </p>
+            )}
           </div>
 
           <div className="overflow-hidden rounded-3xl border border-hairline bg-card">
@@ -176,7 +187,7 @@ export function LiveDeskMap() {
                   disabled={selected.displayStatus !== "free"}
                   onClick={() => {
                     setSelected(null);
-                    open({ type: "hourly", desk: selected });
+                    open({ type: preferredType ?? "hourly", desk: selected });
                   }}
                 >
                   {selected.displayStatus === "free" ? "رزرو این میز" : "این میز فعلاً در دسترس نیست"}

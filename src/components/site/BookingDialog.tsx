@@ -49,7 +49,11 @@ export type BookingOpenOptions = {
   desk?: PublicDesk;
 };
 
-type Ctx = { open: (options?: BookingOpenOptions) => void };
+type Ctx = {
+  open: (options?: BookingOpenOptions) => void;
+  preferredType: BookingType | null;
+  prepareTier: (type: BookingType) => void;
+};
 const BookingCtx = createContext<Ctx | null>(null);
 
 const PENDING_BOOKING_KEY = "aghaz_pending_booking";
@@ -140,6 +144,7 @@ export function BookingProvider({ children }: { children: React.ReactNode }) {
   const [downloading, setDownloading] = useState(false);
   const [confirming, setConfirming] = useState(false);
   const [customerName, setCustomerName] = useState("");
+  const [preferredType, setPreferredType] = useState<BookingType | null>(null);
 
   useEffect(() => {
     let active = true;
@@ -231,16 +236,25 @@ export function BookingProvider({ children }: { children: React.ReactNode }) {
     }
   };
 
+  const prepareTier = useCallback((tier: BookingType) => {
+    setPreferredType(tier);
+  }, []);
+
   const openFn = useCallback(
     (options?: BookingOpenOptions) => {
-      if (options?.desk) setSelectedDesk(options.desk);
-      else setSelectedDesk(null);
-      if (options?.type) setType(options.type);
+      if (options?.desk) {
+        setSelectedDesk(options.desk);
+        setType(options.type ?? preferredType ?? "hourly");
+        setPreferredType(null);
+      } else {
+        setSelectedDesk(null);
+        setType(options?.type ?? "hourly");
+      }
       setDate(new Date());
       setReceipt(null);
       setOpen(true);
     },
-    [],
+    [preferredType],
   );
 
   useEffect(() => {
@@ -266,7 +280,10 @@ export function BookingProvider({ children }: { children: React.ReactNode }) {
     };
   }, [open, selectedDesk, receipt, fetchDesks]);
 
-  const ctx = useMemo(() => ({ open: openFn }), [openFn]);
+  const ctx = useMemo(
+    () => ({ open: openFn, preferredType, prepareTier }),
+    [openFn, preferredType, prepareTier],
+  );
 
   const current = typeMeta(pricing, type);
 
