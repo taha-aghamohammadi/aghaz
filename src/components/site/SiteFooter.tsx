@@ -1,5 +1,5 @@
 import { Link } from "@tanstack/react-router";
-import logo from "@/assets/aghaz-logo.png.asset.json";
+import { logo } from "@/lib/site-assets";
 
 export function SiteFooter() {
   const cols = [

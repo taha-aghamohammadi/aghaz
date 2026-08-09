@@ -3,7 +3,7 @@ import { Button } from "@/components/ui/button";
 import { SiteHeader } from "@/components/site/SiteHeader";
 import { SiteFooter } from "@/components/site/SiteFooter";
 import { BookingProvider } from "@/components/site/BookingDialog";
-import logo from "@/assets/aghaz-logo.png.asset.json";
+import { logo } from "@/lib/site-assets";
 
 export const Route = createFileRoute("/brand")({
   head: () => ({

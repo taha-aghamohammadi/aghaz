@@ -4,7 +4,7 @@ import { useServerFn } from "@tanstack/react-start";
 import { BarChart3, CalendarCheck, Coins, LayoutGrid, ShieldAlert, Users, Wallet } from "lucide-react";
 import { getMyAccess } from "@/lib/admin.functions";
 import { Button } from "@/components/ui/button";
-import logo from "@/assets/aghaz-logo.png.asset.json";
+import { logo } from "@/lib/site-assets";
 
 export const Route = createFileRoute("/_authenticated/admin")({
   component: AdminLayout,

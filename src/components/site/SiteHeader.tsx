@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { useBooking } from "@/components/site/BookingDialog";
 import { supabase } from "@/integrations/supabase/client";
-import logo from "@/assets/aghaz-logo.png.asset.json";
+import { logo } from "@/lib/site-assets";
 
 const links = [
   { label: "میزها", href: "#spaces" },

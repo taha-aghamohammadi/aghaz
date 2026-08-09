@@ -34,7 +34,7 @@ import {
   faDateTime,
   toman,
 } from "@/lib/fa-format";
-import logo from "@/assets/aghaz-logo.png.asset.json";
+import { logo } from "@/lib/site-assets";
 
 export const Route = createFileRoute("/_authenticated/account")({
   head: () => ({

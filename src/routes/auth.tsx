@@ -21,7 +21,7 @@ import { requestPhoneOtp, updateMyProfile, verifyPhoneOtp } from "@/lib/auth.fun
 import { OtpDemoBadge } from "@/components/site/OtpDemoBadge";
 import { isOtpDemoMode } from "@/lib/demo-mode";
 import { normalizeNationalId } from "@/lib/national-id";
-import logo from "@/assets/aghaz-logo.png.asset.json";
+import { logo } from "@/lib/site-assets";
 
 export const Route = createFileRoute("/auth")({
   validateSearch: (search: Record<string, unknown>) => ({

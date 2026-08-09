@@ -25,7 +25,7 @@ import {
   toman,
 } from "@/lib/fa-format";
 import { buildReceiptHtml, type Receipt } from "@/components/site/receipt-document";
-import logo from "@/assets/aghaz-logo.png.asset.json";
+import { logo } from "@/lib/site-assets";
 
 export const Route = createFileRoute("/_authenticated/dashboard")({
   head: () => ({

@@ -33,11 +33,7 @@ import { getPublicPricing } from "@/lib/booking.functions";
 import { DEFAULT_PRICING, unitPriceForType } from "@/lib/booking.service";
 import { pricingMainAmount, pricingUnitLabel } from "@/lib/fa-format";
 import { Toaster } from "@/components/ui/sonner";
-import space1 from "@/assets/space-1.jpg.asset.json";
-import space2 from "@/assets/space-2.jpg.asset.json";
-import space3 from "@/assets/space-3.jpg.asset.json";
-import space4 from "@/assets/space-4.jpg.asset.json";
-import space5 from "@/assets/space-5.jpg.asset.json";
+import { logo, spaceImages } from "@/lib/site-assets";
 
 export const Route = createFileRoute("/")({
   head: () => ({
@@ -143,7 +139,7 @@ function HeroPreview() {
       <div className="absolute inset-x-10 -top-4 h-16 rounded-t-3xl bg-gradient-to-b from-primary/10 to-transparent blur-2xl" />
       <div className="relative overflow-hidden rounded-2xl border border-hairline bg-card shadow-[0_30px_80px_-20px_rgba(0,0,0,0.18)]">
         <img
-          src={space1.url}
+          src={spaceImages.space1}
           alt="نمای فضای کار اشتراکی آغاز با میزهای اشتراکی و نور طبیعی"
           width={1600}
           height={1104}
@@ -158,11 +154,11 @@ function HeroPreview() {
 
 function Gallery() {
   const photos = [
-    { src: space1.url, alt: "سالن اصلی فضای کار اشتراکی آغاز", w: 1600, h: 1104, cls: "sm:col-span-2 sm:row-span-2" },
-    { src: space4.url, alt: "میزهای کنار پنجره در فضای ساکت", w: 1200, h: 1600, cls: "sm:row-span-2" },
-    { src: space3.url, alt: "لانج و کافه فضای کار آغاز", w: 1200, h: 1200, cls: "" },
-    { src: space2.url, alt: "جزئیات میز اشتراکی آماده کار", w: 1200, h: 1200, cls: "" },
-    { src: space5.url, alt: "ورودی و پذیرش فضای کار آغاز", w: 1600, h: 1104, cls: "sm:col-span-2" },
+    { src: spaceImages.space1, alt: "سالن اصلی فضای کار اشتراکی آغاز", w: 1600, h: 1104, cls: "sm:col-span-2 sm:row-span-2" },
+    { src: spaceImages.space4, alt: "میزهای کنار پنجره در فضای ساکت", w: 1200, h: 1600, cls: "sm:row-span-2" },
+    { src: spaceImages.space3, alt: "لانج و کافه فضای کار آغاز", w: 1200, h: 1200, cls: "" },
+    { src: spaceImages.space2, alt: "جزئیات میز اشتراکی آماده کار", w: 1200, h: 1200, cls: "" },
+    { src: spaceImages.space5, alt: "ورودی و پذیرش فضای کار آغاز", w: 1600, h: 1104, cls: "sm:col-span-2" },
   ];
 
   return (
