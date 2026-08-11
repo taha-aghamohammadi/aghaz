@@ -65,8 +65,7 @@ export default defineConfig(({ mode, command }) => {
       }),
       command === "build"
         ? nitro({
-            preset: "node-server",
-            serve: { env: [...SERVER_ENV_KEYS] },
+            preset: "vercel",
           })
         : undefined,
       viteReact(),
