@@ -190,7 +190,6 @@ function Hero() {
           <div className="mt-8 flex flex-wrap items-center justify-center gap-x-6 gap-y-2 text-xs text-muted-foreground">
             <span className="inline-flex items-center gap-1.5"><Check className="h-3.5 w-3.5 text-primary" /> بدون نیاز به اپ</span>
             <span className="inline-flex items-center gap-1.5"><Check className="h-3.5 w-3.5 text-primary" /> پرداخت آنلاین</span>
-            <span className="inline-flex items-center gap-1.5"><Check className="h-3.5 w-3.5 text-primary" /> لغو هر زمان</span>
           </div>
         </div>
       </div>
