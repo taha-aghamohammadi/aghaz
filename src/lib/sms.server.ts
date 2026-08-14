@@ -1,20 +1,55 @@
 /**
- * SMS delivery for OTP. Configure Kavenegar via env vars.
- * Falls back to console log when SMS_API_KEY is not set (MVP demo mode).
+ * SMS delivery for OTP. Limosms is the primary provider (pattern message),
+ * Kavenegar is a fallback. Falls back to console log when no provider is
+ * configured (MVP demo mode).
  */
 
-export async function sendOtpSms(phone: string, code: string): Promise<boolean> {
-  const apiKey = process.env.KAVENEGAR_API_KEY;
-  const template = process.env.KAVENEGAR_OTP_TEMPLATE ?? "verify";
-  const receptor = phone.replace("+98", "0");
+function toZeroPrefix(phone: string): string {
+  const digits = phone.replace("+98", "0");
+  return digits.startsWith("0") ? digits : `0${digits}`;
+}
 
-  if (!apiKey) {
-    console.info(`[SMS demo] OTP for ${phone}: ${code}`);
-    return false;
+async function sendLimosms(phone: string, code: string): Promise<boolean> {
+  const apiKey = process.env.LIMOSMS_API_KEY;
+  if (!apiKey) return false;
+
+  const otpId = Number(process.env.LIMOSMS_OTP_ID ?? 2964);
+  if (!Number.isFinite(otpId)) throw new Error("LIMOSMS_OTP_ID نامعتبر است.");
+
+  const res = await fetch("https://api.limosms.com/api/sendpatternmessage", {
+    method: "POST",
+    headers: { "Content-Type": "application/json", ApiKey: apiKey },
+    body: JSON.stringify({
+      OtpId: otpId,
+      ReplaceToken: [code],
+      MobileNumber: toZeroPrefix(phone),
+      Send: true,
+    }),
+  });
+
+  type LimosmsResponse = { Success?: boolean; Message?: string; TotalAmount?: number };
+  let body: LimosmsResponse | undefined;
+  try {
+    body = (await res.json()) as LimosmsResponse;
+  } catch {
+    // non-JSON body
   }
 
+  if (!res.ok || !body?.Success) {
+    console.error("[SMS] Limosms error:", res.status, body?.Message ?? "");
+    throw new Error("ارسال پیامک ناموفق بود.");
+  }
+  console.info(`[SMS] Limosms sent to ${phone}, cost=${body.TotalAmount}`);
+  return true;
+}
+
+async function sendKavenegar(phone: string, code: string): Promise<boolean> {
+  const apiKey = process.env.KAVENEGAR_API_KEY;
+  if (!apiKey) return false;
+
+  const template = process.env.KAVENEGAR_OTP_TEMPLATE ?? "verify";
   const url = new URL(`https://api.kavenegar.com/v1/${apiKey}/verify/lookup.json`);
-  url.searchParams.set("receptor", receptor);
+  url.searchParams.set("receptor", toZeroPrefix(phone));
   url.searchParams.set("token", code);
   url.searchParams.set("template", template);
 
@@ -27,6 +62,25 @@ export async function sendOtpSms(phone: string, code: string): Promise<boolean> 
   return true;
 }
 
+export async function sendOtpSms(phone: string, code: string): Promise<boolean> {
+  try {
+    const sent = await sendLimosms(phone, code);
+    if (sent) return true;
+  } catch (e) {
+    console.error("[SMS] Limosms failed, trying Kavenegar:", e);
+  }
+
+  try {
+    const sent = await sendKavenegar(phone, code);
+    if (sent) return true;
+  } catch (e) {
+    console.error("[SMS] Kavenegar failed:", e);
+  }
+
+  console.info(`[SMS demo] OTP for ${phone}: ${code}`);
+  return false;
+}
+
 export function isSmsConfigured(): boolean {
-  return Boolean(process.env.KAVENEGAR_API_KEY);
+  return Boolean(process.env.LIMOSMS_API_KEY) || Boolean(process.env.KAVENEGAR_API_KEY);
 }
