@@ -21,7 +21,7 @@ export function phoneToEmail(phone: string): string {
 export function generateCode(): string {
   const bytes = new Uint32Array(1);
   crypto.getRandomValues(bytes);
-  return String(100000 + (bytes[0]! % 900000));
+  return String(1000 + (bytes[0]! % 9000));
 }
 
 export async function hashCode(phone: string, code: string): Promise<string> {

@@ -142,8 +142,8 @@ function AuthPage() {
   }
 
   async function confirmCode() {
-    if (code.trim().length !== 6) {
-      toast.error("کد ۶ رقمی را وارد کنید.");
+    if (code.trim().length !== 4) {
+      toast.error("کد ۴ رقمی را وارد کنید.");
       return;
     }
     setLoading(true);
@@ -321,7 +321,7 @@ function AuthPage() {
                     </div>
                   )}
                   <p className="mt-2 text-[13.5px] leading-6 text-muted-foreground">
-                    کد ۶ رقمی برای شماره{" "}
+                    کد ۴ رقمی برای شماره{" "}
                     <span dir="ltr" className="font-medium text-foreground">
                       {toFa(phone)}
                     </span>{" "}
@@ -361,15 +361,15 @@ function AuthPage() {
                     ref={codeRef}
                     dir="ltr"
                     inputMode="numeric"
-                    maxLength={6}
+                    maxLength={4}
                     value={code}
                     onChange={(e) => setCode(e.target.value.replace(/\D/g, ""))}
-                    placeholder="------"
+                    placeholder="----"
                     className="h-14 text-center text-2xl font-semibold tracking-[0.5em]"
                   />
                   <Button
                     type="submit"
-                    disabled={loading || code.length !== 6}
+                    disabled={loading || code.length !== 4}
                     className="h-11 w-full rounded-full text-[14px]"
                   >
                     {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : "تأیید و ادامه"}
