@@ -6,6 +6,7 @@ import {
   BUSINESS_HOUR_START,
   computeBookingWindow,
   computeTotalAmount,
+  expireStalePendingBookings,
   fetchPricingSettings,
   generateBookingCode,
   iranDateTime,
@@ -43,10 +44,10 @@ export const listPublicDesks = createServerFn({ method: "GET" })
   .handler(async ({ data }) => {
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
     const now = new Date();
-    const windowStart = data.windowStart ?? iranDateTime(now.toISOString().slice(0, 10), BUSINESS_HOUR_START);
+    const windowStart =
+      data.windowStart ?? iranDateTime(now.toISOString().slice(0, 10), BUSINESS_HOUR_START);
     const windowEnd =
-      data.windowEnd ??
-      iranDateTime(now.toISOString().slice(0, 10), BUSINESS_HOUR_END);
+      data.windowEnd ?? iranDateTime(now.toISOString().slice(0, 10), BUSINESS_HOUR_END);
 
     const [desksRes, bookingsRes, pricing] = await Promise.all([
       supabaseAdmin.from("desks").select("*").eq("is_active", true).order("code"),
@@ -64,7 +65,19 @@ export const listPublicDesks = createServerFn({ method: "GET" })
     const desks = (desksRes.data ?? []).map((d) =>
       mapPublicDesk(d, bookings, windowStart, windowEnd),
     );
-    return { desks, pricing, windowStart, windowEnd };
+    const card = await supabaseAdmin
+      .from("pricing_settings")
+      .select("card_number, card_holder")
+      .eq("id", "00000000-0000-0000-0000-000000000001")
+      .maybeSingle();
+    return {
+      desks,
+      pricing,
+      windowStart,
+      windowEnd,
+      cardNumber: card.data?.card_number ?? "",
+      cardHolder: card.data?.card_holder ?? "",
+    };
   });
 
 export const checkDeskAvailability = createServerFn({ method: "POST" })
@@ -152,25 +165,29 @@ export const createUserBooking = createServerFn({ method: "POST" })
       code = generateBookingCode();
     }
 
-    const { data: row, error } = await supabase.from("bookings").insert({
-      code,
-      user_id: context.userId,
-      desk_id: data.deskId,
-      desk_code: desk.code,
-      booking_type: data.bookingType,
-      start_at: window.startAt,
-      end_at: window.endAt,
-      units: window.units,
-      unit_price: unitPrice,
-      total_amount: totalAmount,
-      status: "pending",
-      payment_status: "unpaid",
-      full_name: profile?.full_name ?? "",
-      phone: profile?.phone ?? "",
-      note: data.note,
-    }).select(
-      "id, code, desk_code, booking_type, start_at, end_at, units, unit_price, total_amount, status, payment_status",
-    ).single();
+    const { data: row, error } = await supabase
+      .from("bookings")
+      .insert({
+        code,
+        user_id: context.userId,
+        desk_id: data.deskId,
+        desk_code: desk.code,
+        booking_type: data.bookingType,
+        start_at: window.startAt,
+        end_at: window.endAt,
+        units: window.units,
+        unit_price: unitPrice,
+        total_amount: totalAmount,
+        status: "pending",
+        payment_status: "unpaid",
+        full_name: profile?.full_name ?? "",
+        phone: profile?.phone ?? "",
+        note: data.note,
+      })
+      .select(
+        "id, code, desk_code, booking_type, start_at, end_at, units, unit_price, total_amount, status, payment_status",
+      )
+      .single();
 
     if (error) throw new Error("ثبت رزرو ناموفق بود.");
     return row;
@@ -213,6 +230,10 @@ export const listMyBookings = createServerFn({ method: "GET" })
       .order("start_at", { ascending: false })
       .limit(50);
     if (error) throw new Error("خواندن رزروها ناموفق بود.");
-    return data ?? [];
+    const rows = data ?? [];
+    const cancelled = await expireStalePendingBookings(rows);
+    if (cancelled.size > 0) {
+      return rows.map((r) => (cancelled.has(r.id) ? { ...r, status: "cancelled" } : r));
+    }
+    return rows;
   });
-

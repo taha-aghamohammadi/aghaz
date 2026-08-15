@@ -12,6 +12,8 @@ export type Receipt = {
   issuedAt: string;
   qrDataUrl: string;
   deskCode?: string;
+  cardNumber?: string;
+  cardHolder?: string;
   statusLabel?: string;
   paymentLabel?: string;
   paymentStatusLabel?: string;
@@ -95,6 +97,8 @@ export function buildReceiptHtml(receipt: Receipt, formatToman: (v: number) => s
   ${row("فضا", receipt.deskCode ? `میز ${receipt.deskCode}` : "میز اشتراکی")}
   ${row("وضعیت", receipt.statusLabel ?? "در انتظار تأیید")}
   ${row("پرداخت", receipt.paymentLabel ?? receipt.paymentStatusLabel ?? "پرداخت‌نشده")}
+  ${receipt.cardNumber ? row("شماره کارت (کارت به کارت)", receipt.cardNumber, true) : ""}
+  ${receipt.cardHolder ? row("به نام", receipt.cardHolder) : ""}
 
   <h2>خلاصه مبلغ</h2>
   ${row(`تعرفه (${formatToman(receipt.unitPrice)} / ${receipt.unit})`, receipt.quantity)}

@@ -1,7 +1,12 @@
 import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
-import { createZarinpalPayment, processPaymentCallback, verifyZarinpalPayment } from "@/lib/payment.server";
+import { expireStalePendingBookings } from "@/lib/booking.service";
+import {
+  createZarinpalPayment,
+  processPaymentCallback,
+  verifyZarinpalPayment,
+} from "@/lib/payment.server";
 
 function paymentCallbackUrl(): string {
   const site = process.env.SITE_URL ?? process.env.VITE_SITE_URL ?? "http://localhost:8080";
@@ -16,14 +21,21 @@ export const createBookingPayment = createServerFn({ method: "POST" })
 
     const { data: booking, error } = await context.supabase
       .from("bookings")
-      .select("id, code, user_id, total_amount, payment_status, status")
+      .select("id, code, user_id, total_amount, payment_status, status, created_at")
       .eq("id", data.bookingId)
       .eq("user_id", context.userId)
       .maybeSingle();
 
     if (error || !booking) throw new Error("رزرو پیدا نشد.");
-    if (booking.payment_status === "paid") throw new Error("این رزرو قبلاً پرداخت شده است.");
-    if (booking.status === "cancelled") throw new Error("رزرو لغوشده قابل پرداخت نیست.");
+    await expireStalePendingBookings(booking);
+    const { data: effective } = await context.supabase
+      .from("bookings")
+      .select("payment_status, status")
+      .eq("id", data.bookingId)
+      .maybeSingle();
+    if (!effective) throw new Error("رزرو پیدا نشد.");
+    if (effective.payment_status === "paid") throw new Error("این رزرو قبلاً پرداخت شده است.");
+    if (effective.status === "cancelled") throw new Error("رزرو لغوشده قابل پرداخت نیست.");
 
     const amount = booking.total_amount;
     if (amount <= 0) throw new Error("مبلغ رزرو نامعتبر است.");
@@ -57,4 +69,6 @@ export const handlePaymentCallback = createServerFn({ method: "GET" })
       })
       .parse(input ?? {}),
   )
-  .handler(async ({ data }) => processPaymentCallback({ authority: data.Authority, status: data.Status }));
+  .handler(async ({ data }) =>
+    processPaymentCallback({ authority: data.Authority, status: data.Status }),
+  );

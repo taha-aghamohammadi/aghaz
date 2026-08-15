@@ -1,7 +1,7 @@
 import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
-import { requireStaff } from "@/lib/booking.service";
+import { expireStalePendingBookings, requireStaff } from "@/lib/booking.service";
 
 export const getWalletBalance = createServerFn({ method: "GET" })
   .middleware([requireSupabaseAuth])
@@ -27,14 +27,21 @@ export const payBookingFromWallet = createServerFn({ method: "POST" })
 
     const { data: booking, error: bookingErr } = await context.supabase
       .from("bookings")
-      .select("id, code, user_id, total_amount, payment_status, status")
+      .select("id, code, user_id, total_amount, payment_status, status, created_at")
       .eq("id", data.bookingId)
       .eq("user_id", context.userId)
       .maybeSingle();
 
     if (bookingErr || !booking) throw new Error("رزرو پیدا نشد.");
-    if (booking.payment_status === "paid") throw new Error("این رزرو قبلاً پرداخت شده است.");
-    if (booking.status === "cancelled") throw new Error("رزرو لغوشده قابل پرداخت نیست.");
+    await expireStalePendingBookings(booking);
+    const { data: effective, error: effErr } = await context.supabase
+      .from("bookings")
+      .select("payment_status, status")
+      .eq("id", data.bookingId)
+      .maybeSingle();
+    if (effErr || !effective) throw new Error("رزرو پیدا نشد.");
+    if (effective.payment_status === "paid") throw new Error("این رزرو قبلاً پرداخت شده است.");
+    if (effective.status === "cancelled") throw new Error("رزرو لغوشده قابل پرداخت نیست.");
 
     const amount = booking.total_amount;
     const { data: wallet } = await supabaseAdmin

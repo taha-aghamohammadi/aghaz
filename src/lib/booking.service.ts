@@ -16,9 +16,17 @@ export type PricingTiers = {
 };
 
 type PricingRow = Database["public"]["Tables"]["pricing_settings"]["Row"];
+export type { PricingRow };
 
 export const BUSINESS_HOUR_START = 8;
 export const BUSINESS_HOUR_END = 20;
+
+/** Card-transfer receipts must be uploaded within 10 minutes of booking creation. */
+export const CARD_PAYMENT_WINDOW_MS = 10 * 60 * 1000;
+
+export function isCardTransferExpired(createdAt: string, now = new Date()): boolean {
+  return now.getTime() - new Date(createdAt).getTime() > CARD_PAYMENT_WINDOW_MS;
+}
 
 type DeskRow = Database["public"]["Tables"]["desks"]["Row"];
 type BookingRow = Database["public"]["Tables"]["bookings"]["Row"];
@@ -153,12 +161,7 @@ export function computeTotalAmount(unitPrice: number, units: number): number {
   return unitPrice * units;
 }
 
-export function overlaps(
-  aStart: string,
-  aEnd: string,
-  bStart: string,
-  bEnd: string,
-): boolean {
+export function overlaps(aStart: string, aEnd: string, bStart: string, bEnd: string): boolean {
   return new Date(aStart) < new Date(bEnd) && new Date(bStart) < new Date(aEnd);
 }
 
@@ -246,4 +249,45 @@ export async function requireStaff(
 ): Promise<void> {
   const { data, error } = await client.rpc("is_staff", { _user_id: userId });
   if (error || !data) throw new Error("دسترسی مدیر لازم است.");
+}
+
+type ExpireCandidate = {
+  id: string;
+  status: string;
+  payment_status: string;
+  created_at: string;
+};
+
+/**
+ * Lazy 10-minute window for card-transfer payments: any pending+unpaid
+ * booking past the window WITHOUT a payment receipt is auto-cancelled.
+ * Returns the ids of bookings that were cancelled so callers can adjust
+ * their already-fetched rows. Uses the service-role client (users can't
+ * UPDATE bookings via RLS). No cron/worker by design.
+ */
+export async function expireStalePendingBookings(
+  selected: ExpireCandidate[] | ExpireCandidate | null,
+): Promise<Set<string>> {
+  if (!selected) return new Set();
+  const rows = Array.isArray(selected) ? selected : [selected];
+  const candidates = rows.filter(
+    (r) =>
+      r.status === "pending" && r.payment_status !== "paid" && isCardTransferExpired(r.created_at),
+  );
+  if (candidates.length === 0) return new Set();
+
+  const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+  const ids = candidates.map((c) => c.id);
+
+  const { data: receipts } = await supabaseAdmin
+    .from("payment_receipts")
+    .select("booking_id")
+    .in("booking_id", ids);
+
+  const withReceipt = new Set((receipts ?? []).map((r) => r.booking_id));
+  const toCancel = ids.filter((id) => !withReceipt.has(id));
+  if (toCancel.length === 0) return new Set();
+
+  await supabaseAdmin.from("bookings").update({ status: "cancelled" }).in("id", toCancel);
+  return new Set(toCancel);
 }

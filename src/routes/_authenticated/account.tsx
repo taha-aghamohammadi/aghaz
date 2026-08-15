@@ -5,6 +5,7 @@ import { useServerFn } from "@tanstack/react-start";
 import {
   Briefcase,
   CalendarDays,
+  CreditCard,
   GraduationCap,
   IdCard,
   Loader2,
@@ -19,6 +20,14 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { Toaster } from "@/components/ui/sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { updateMyProfile } from "@/lib/auth.functions";
@@ -27,6 +36,7 @@ import { cancelMyBooking } from "@/lib/booking.functions";
 import { listMyBookings } from "@/lib/booking.functions";
 import { createBookingPayment } from "@/lib/payment.functions";
 import { getWalletBalance, payBookingFromWallet } from "@/lib/wallet.functions";
+import { getCardTransferInfo, listMyReceipts, submitReceipt } from "@/lib/receipt.functions";
 import {
   BOOKING_STATUS_LABEL,
   BOOKING_TYPE_LABEL,
@@ -53,7 +63,9 @@ export const Route = createFileRoute("/_authenticated/account")({
   component: AccountPage,
   errorComponent: () => (
     <div className="grid min-h-screen place-items-center px-6 text-center">
-      <p className="text-sm text-muted-foreground">بارگذاری حساب ممکن نشد. صفحه را دوباره باز کنید.</p>
+      <p className="text-sm text-muted-foreground">
+        بارگذاری حساب ممکن نشد. صفحه را دوباره باز کنید.
+      </p>
     </div>
   ),
   notFoundComponent: () => (
@@ -65,6 +77,21 @@ export const Route = createFileRoute("/_authenticated/account")({
 
 const toFa = (v: string) => v.replace(/\d/g, (d) => "۰۱۲۳۴۵۶۷۸۹"[+d]!);
 
+type BookingSummary = {
+  id: string;
+  code: string;
+  desk_code: string;
+  booking_type: string;
+  start_at: string;
+  end_at: string;
+  units: number;
+  unit_price: number;
+  total_amount: number;
+  status: string;
+  payment_status: string;
+  created_at: string;
+};
+
 const EDUCATION_OPTIONS = ["دیپلم", "کاردانی", "کارشناسی", "کارشناسی ارشد", "دکتری", "سایر"];
 
 function AccountPage() {
@@ -75,6 +102,9 @@ function AccountPage() {
   const startPayment = useServerFn(createBookingPayment);
   const walletPay = useServerFn(payBookingFromWallet);
   const fetchWallet = useServerFn(getWalletBalance);
+  const fetchCardInfo = useServerFn(getCardTransferInfo);
+  const fetchMyReceipts = useServerFn(listMyReceipts);
+  const sendReceipt = useServerFn(submitReceipt);
   const [editing, setEditing] = useState(false);
   const [form, setForm] = useState({
     fullName: "",
@@ -110,6 +140,43 @@ function AccountPage() {
     queryKey: ["my-bookings"],
     queryFn: () => fetchMyBookings(),
   });
+
+  const cardTransferInfo = useQuery({
+    queryKey: ["card-transfer-info"],
+    queryFn: () => fetchCardInfo(),
+  });
+
+  const { data: myReceipts, refetch: refetchReceipts } = useQuery({
+    queryKey: ["my-receipts"],
+    queryFn: () => fetchMyReceipts(),
+  });
+  const receiptByBooking = new Map((myReceipts ?? []).map((r) => [r.booking_id, r] as const));
+
+  const [cardBookingId, setCardBookingId] = useState<string | null>(null);
+  const cardBooking = (bookings ?? []).find((b) => b.id === cardBookingId) ?? null;
+
+  const submitCard = useMutation({
+    mutationFn: async ({ file }: { file: File }) => {
+      if (!cardBookingId) throw new Error("رزرو مشخص نشده است.");
+      const { data: userData } = await supabase.auth.getUser();
+      if (!userData.user) throw new Error("ابتدا وارد شوید.");
+      const ext = file.name.split(".").pop() || "jpg";
+      const path = `${userData.user.id}/${crypto.randomUUID()}.${ext}`;
+      const { error: upErr } = await supabase.storage.from("receipts").upload(path, file, {
+        contentType: file.type || undefined,
+      });
+      if (upErr) throw new Error("آپلود تصویر رسید ناموفق بود.");
+      await sendReceipt({ data: { bookingId: cardBookingId, imagePath: path } });
+    },
+    onSuccess: async () => {
+      toast.success("رسید ارسال شد و در انتظار بررسی مدیر است.");
+      setCardBookingId(null);
+      await queryClient.invalidateQueries({ queryKey: ["my-bookings"] });
+      await refetchReceipts();
+    },
+    onError: (e: Error) => toast.error(e.message),
+  });
+  const [cardFile, setCardFile] = useState<File | null>(null);
 
   const cancel = useMutation({
     mutationFn: (id: string) => cancelBooking({ data: { id } }),
@@ -347,10 +414,7 @@ function AccountPage() {
                   </span>
                   <div>
                     <dt className="text-[12px] text-muted-foreground">{row.label}</dt>
-                    <dd
-                      dir={row.ltr ? "ltr" : undefined}
-                      className="text-[14.5px] font-medium"
-                    >
+                    <dd dir={row.ltr ? "ltr" : undefined} className="text-[14.5px] font-medium">
                       {row.value}
                     </dd>
                   </div>
@@ -387,9 +451,14 @@ function AccountPage() {
           ) : (
             <ul className="mt-6 divide-y divide-hairline">
               {bookings.map((b) => (
-                <li key={b.id} className="flex flex-wrap items-start justify-between gap-4 py-4 first:pt-0">
+                <li
+                  key={b.id}
+                  className="flex flex-wrap items-start justify-between gap-4 py-4 first:pt-0"
+                >
                   <div className="min-w-0">
-                    <div className="font-mono text-[13px] font-semibold" dir="ltr">{b.code}</div>
+                    <div className="font-mono text-[13px] font-semibold" dir="ltr">
+                      {b.code}
+                    </div>
                     <div className="mt-1 text-[13px]">
                       میز {b.desk_code} · {BOOKING_TYPE_LABEL[b.booking_type] ?? b.booking_type}
                     </div>
@@ -403,6 +472,26 @@ function AccountPage() {
                       <Badge variant="outline" className="rounded-full text-[11px]">
                         {PAYMENT_STATUS_LABEL[b.payment_status] ?? b.payment_status}
                       </Badge>
+                      {b.status === "pending" &&
+                        b.payment_status !== "paid" &&
+                        (() => {
+                          const receipt = receiptByBooking.get(b.id);
+                          if (receipt?.status === "pending") {
+                            return (
+                              <Badge className="rounded-full text-[11px]">
+                                در انتظار تأیید مدیر
+                              </Badge>
+                            );
+                          }
+                          if (receipt?.status === "rejected") {
+                            return (
+                              <Badge variant="destructive" className="rounded-full text-[11px]">
+                                رسید رد شد · دوباره ارسال کنید
+                              </Badge>
+                            );
+                          }
+                          return null;
+                        })()}
                     </div>
                   </div>
                   <div className="flex flex-col items-end gap-2">
@@ -417,6 +506,16 @@ function AccountPage() {
                           onClick={() => payOnline.mutate(b.id)}
                         >
                           پرداخت آنلاین
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant="secondary"
+                          className="h-8 rounded-full"
+                          disabled={receiptByBooking.get(b.id)?.status === "pending"}
+                          onClick={() => setCardBookingId(b.id)}
+                        >
+                          <CreditCard className="ml-1.5 h-3.5 w-3.5" />
+                          پرداخت کارت به کارت
                         </Button>
                         {wallet && wallet.balance >= (b.total_amount ?? 0) && (
                           <Button
@@ -455,6 +554,55 @@ function AccountPage() {
           </Button>
         </div>
       </main>
+
+      <Dialog open={!!cardBooking} onOpenChange={(open) => !open && setCardBookingId(null)}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>پرداخت کارت به کارت</DialogTitle>
+            <DialogDescription>
+              مبلغ {cardBooking ? toman(cardBooking.total_amount ?? 0) : ""} را به شماره کارت زیر
+              واریز کنید و تصویر رسید را ارسال کنید.
+            </DialogDescription>
+          </DialogHeader>
+
+          {cardTransferInfo.data?.cardNumber && (
+            <div className="rounded-2xl border border-hairline bg-surface p-4">
+              <div className="text-[12px] text-muted-foreground">شماره کارت</div>
+              <div className="mt-1 font-mono text-[20px] font-semibold tracking-widest" dir="ltr">
+                {toFa(cardTransferInfo.data.cardNumber)}
+              </div>
+              {cardTransferInfo.data.cardHolder && (
+                <div className="mt-2 text-[13px] font-medium">
+                  {cardTransferInfo.data.cardHolder}
+                </div>
+              )}
+            </div>
+          )}
+
+          <Label htmlFor="receipt-file">تصویر رسید واریز</Label>
+          <Input
+            id="receipt-file"
+            type="file"
+            accept="image/*"
+            onChange={(e) => setCardFile(e.target.files?.[0] ?? null)}
+          />
+
+          <DialogFooter className="gap-2">
+            <Button
+              size="sm"
+              className="rounded-full"
+              disabled={!cardFile || submitCard.isPending}
+              onClick={() => cardFile && submitCard.mutate({ file: cardFile })}
+            >
+              {submitCard.isPending && <Loader2 className="ml-1.5 h-4 w-4 animate-spin" />}
+              ارسال رسید
+            </Button>
+          </DialogFooter>
+          <p className="text-center text-[11px] text-muted-foreground">
+            برای ارسال اولیه‌ی رسید فقط ۱۰ دقیقه فرصت دارید.
+          </p>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

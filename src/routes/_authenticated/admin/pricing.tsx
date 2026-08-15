@@ -2,7 +2,7 @@ import { createFileRoute } from "@tanstack/react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 import { useMemo, useState } from "react";
-import { Clock, CalendarDays, CalendarRange, Percent, Sparkles } from "lucide-react";
+import { Clock, CalendarDays, CalendarRange, Percent, Sparkles, CreditCard } from "lucide-react";
 import { toast } from "sonner";
 import { getPricingSettings, updatePricingSettings } from "@/lib/admin.functions";
 import {
@@ -45,7 +45,13 @@ const TIERS: {
   tint: string;
 }[] = [
   { key: "hourly", label: "ساعتی", unit: "تومان / ساعت", icon: Clock, tint: "from-primary/15" },
-  { key: "daily", label: "روزانه", unit: "تومان / روز", icon: CalendarDays, tint: "from-cyan-500/15" },
+  {
+    key: "daily",
+    label: "روزانه",
+    unit: "تومان / روز",
+    icon: CalendarDays,
+    tint: "from-cyan-500/15",
+  },
   {
     key: "monthly",
     label: "ماهانه",
@@ -91,6 +97,8 @@ function AdminPricing() {
 
   const pricing = data ?? {
     ...DEFAULT_PRICING,
+    cardNumber: "",
+    cardHolder: "",
     updatedAt: null as string | null,
     source: "defaults" as const,
   };
@@ -100,6 +108,8 @@ function AdminPricing() {
   const [monthlyRate, setMonthlyRate] = useState("");
   const [discountPercent, setDiscountPercent] = useState("");
   const [discountDurationDays, setDiscountDurationDays] = useState("");
+  const [cardNumber, setCardNumber] = useState("");
+  const [cardHolder, setCardHolder] = useState("");
 
   const rateInputs = {
     hourly: hourlyRate,
@@ -135,10 +145,12 @@ function AdminPricing() {
     dailyRate.trim().length > 0 ||
     monthlyRate.trim().length > 0 ||
     discountPercent.trim().length > 0 ||
-    discountDurationDays.trim().length > 0;
+    discountDurationDays.trim().length > 0 ||
+    cardNumber.trim().length > 0 ||
+    cardHolder.trim().length > 0;
 
-  const buildPayload = (): Record<string, number> | null => {
-    const payload: Record<string, number> = {};
+  const buildPayload = (): Record<string, number | string> | null => {
+    const payload: Record<string, number | string> = {};
     const hourly = parseOptionalPositivePrice(hourlyRate);
     const daily = parseOptionalPositivePrice(dailyRate);
     const monthly = parseOptionalPositivePrice(monthlyRate);
@@ -169,6 +181,8 @@ function AdminPricing() {
       if (duration === null) return null;
       payload.discountDurationDays = duration;
     }
+    if (cardNumber.trim()) payload.cardNumber = cardNumber.trim();
+    if (cardHolder.trim()) payload.cardHolder = cardHolder.trim();
 
     if (Object.keys(payload).length === 0) {
       toast.error("حداقل یک فیلد برای به‌روزرسانی وارد کنید.");
@@ -178,7 +192,7 @@ function AdminPricing() {
   };
 
   const save = useMutation({
-    mutationFn: (payload: Record<string, number>) => savePricing({ data: payload }),
+    mutationFn: (payload: Record<string, number | string>) => savePricing({ data: payload }),
     onSuccess: () => {
       toast.success("تعرفه‌ها ذخیره شد");
       setHourlyRate("");
@@ -186,6 +200,8 @@ function AdminPricing() {
       setMonthlyRate("");
       setDiscountPercent("");
       setDiscountDurationDays("");
+      setCardNumber("");
+      setCardHolder("");
       void qc.invalidateQueries({ queryKey: ["admin-pricing"] });
       void qc.invalidateQueries({ queryKey: ["public-pricing"] });
     },
@@ -265,9 +281,7 @@ function AdminPricing() {
                     ? pricing.dailyRate
                     : pricing.monthlyRate;
               const effective =
-                previewDiscountPercent > 0
-                  ? applyDiscount(base, previewDiscountPercent)
-                  : current;
+                previewDiscountPercent > 0 ? applyDiscount(base, previewDiscountPercent) : current;
               const input = rateInputs[tier.key];
               const invalid = input.length > 0 && !parseOptionalPositivePrice(input);
               const Icon = tier.icon;
@@ -294,13 +308,19 @@ function AdminPricing() {
 
                     {previewDiscountPercent > 0 && effective < base && (
                       <div className="mt-3 rounded-lg bg-primary/5 px-3 py-2">
-                        <div className="text-[10px] text-primary">با تخفیف {previewDiscountPercent}٪</div>
-                        <div className="text-[14px] font-semibold text-primary">{toman(effective)}</div>
+                        <div className="text-[10px] text-primary">
+                          با تخفیف {previewDiscountPercent}٪
+                        </div>
+                        <div className="text-[14px] font-semibold text-primary">
+                          {toman(effective)}
+                        </div>
                       </div>
                     )}
 
                     <div className="mt-4 space-y-1.5">
-                      <Label className="text-[11px] text-muted-foreground">مقدار جدید (اختیاری)</Label>
+                      <Label className="text-[11px] text-muted-foreground">
+                        مقدار جدید (اختیاری)
+                      </Label>
                       <Input
                         value={input}
                         onChange={(e) =>
@@ -340,9 +360,7 @@ function AdminPricing() {
                 </Label>
                 <Input
                   value={discountPercent}
-                  onChange={(e) =>
-                    setDiscountPercent(stripPriceDigits(e.target.value).slice(0, 3))
-                  }
+                  onChange={(e) => setDiscountPercent(stripPriceDigits(e.target.value).slice(0, 3))}
                   dir="ltr"
                   inputMode="numeric"
                   placeholder="مثلاً ۱۰"
@@ -380,10 +398,50 @@ function AdminPricing() {
             </div>
           </div>
 
-          <div className="flex flex-col-reverse gap-2 border-t border-hairline px-5 py-4 sm:flex-row sm:items-center sm:justify-between sm:px-6">
-            <p className="text-[11px] text-muted-foreground">
-              فیلدهای خالی بدون تغییر می‌مانند.
+          <div className="border-t border-hairline bg-surface/30 px-5 py-5 sm:px-6">
+            <div className="flex items-center gap-2 text-[12px] font-medium text-muted-foreground">
+              <CreditCard className="h-4 w-4" />
+              پرداخت کارت به کارت
+            </div>
+            <p className="mt-1 text-[11px] text-muted-foreground">
+              شماره کارتی که کاربران برای پرداخت رزرو به آن واریز می‌کنند. در صفحه کاربر نمایش داده
+              می‌شود.
             </p>
+            <div className="mt-4 grid gap-4 sm:grid-cols-2">
+              <div className="space-y-1.5">
+                <Label className="text-[11px] text-muted-foreground">
+                  شماره کارت
+                  {pricing.cardNumber && (
+                    <span className="text-foreground/70"> · فعلی {pricing.cardNumber}</span>
+                  )}
+                </Label>
+                <Input
+                  value={cardNumber}
+                  onChange={(e) => setCardNumber(e.target.value.replace(/\D/g, "").slice(0, 16))}
+                  dir="ltr"
+                  inputMode="numeric"
+                  placeholder="مثلاً ۵۸۷4…"
+                />
+              </div>
+              <div className="space-y-1.5">
+                <Label className="text-[11px] text-muted-foreground">
+                  نام صاحب کارت
+                  {pricing.cardHolder && (
+                    <span className="text-foreground/70"> · فعلی {pricing.cardHolder}</span>
+                  )}
+                </Label>
+                <Input
+                  value={cardHolder}
+                  onChange={(e) => setCardHolder(e.target.value)}
+                  dir="rtl"
+                  placeholder="مثلاً علی محمدی"
+                />
+              </div>
+            </div>
+          </div>
+
+          <div className="flex flex-col-reverse gap-2 border-t border-hairline px-5 py-4 sm:flex-row sm:items-center sm:justify-between sm:px-6">
+            <p className="text-[11px] text-muted-foreground">فیلدهای خالی بدون تغییر می‌مانند.</p>
             <Button
               className="rounded-full sm:min-w-[9rem]"
               disabled={save.isPending || !hasAnyInput || hasInvalidInput}

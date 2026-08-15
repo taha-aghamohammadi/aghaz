@@ -2,9 +2,10 @@ import { createFileRoute } from "@tanstack/react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 import { useState } from "react";
-import { CheckCircle2, LogIn, Search, Trash2, XCircle } from "lucide-react";
+import { CheckCircle2, LogIn, Receipt as ReceiptIcon, Search, Trash2, XCircle } from "lucide-react";
 import { toast } from "sonner";
 import { deleteBooking, listBookings, updateBooking } from "@/lib/admin.functions";
+import { listReceipts, reviewReceipt } from "@/lib/receipt.functions";
 import {
   BOOKING_STATUS_LABEL,
   BOOKING_TYPE_LABEL,
@@ -18,6 +19,14 @@ import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import {
   Table,
   TableBody,
   TableCell,
@@ -30,7 +39,10 @@ export const Route = createFileRoute("/_authenticated/admin/bookings")({
   head: () => ({
     meta: [
       { title: "مدیریت رزروها | آغاز" },
-      { name: "description", content: "لیست رزروهای میزهای اشتراکی آغاز با امکان تأیید، لغو و چک‌این." },
+      {
+        name: "description",
+        content: "لیست رزروهای میزهای اشتراکی آغاز با امکان تأیید، لغو و چک‌این.",
+      },
       { name: "robots", content: "noindex" },
       { property: "og:title", content: "مدیریت رزروها | آغاز" },
       { property: "og:description", content: "تأیید، لغو و چک‌این رزروهای فضای کار آغاز." },
@@ -56,10 +68,31 @@ function AdminBookings() {
   const fetchBookings = useServerFn(listBookings);
   const patchBooking = useServerFn(updateBooking);
   const removeBooking = useServerFn(deleteBooking);
+  const fetchReceipts = useServerFn(listReceipts);
+  const review = useServerFn(reviewReceipt);
 
   const { data, isLoading } = useQuery({
     queryKey: ["admin-bookings", query, status],
     queryFn: () => fetchBookings({ data: { search: query, status } }),
+  });
+
+  const { data: receipts } = useQuery({
+    queryKey: ["admin-receipts"],
+    queryFn: () => fetchReceipts(),
+  });
+  const receiptsByBooking = new Map((receipts ?? []).map((r) => [r.booking_id, r] as const));
+  const [receiptBookingId, setReceiptBookingId] = useState<string | null>(null);
+
+  const reviewReceipts = useMutation({
+    mutationFn: ({ receiptId, action }: { receiptId: string; action: "approve" | "reject" }) =>
+      review({ data: { receiptId, action } }),
+    onSuccess: (res) => {
+      toast.success(res.action === "approve" ? "رسید تأیید و رزرو نهایی شد" : "رسید رد شد");
+      setReceiptBookingId(null);
+      refresh();
+      void qc.invalidateQueries({ queryKey: ["admin-receipts"] });
+    },
+    onError: (e: Error) => toast.error(e.message),
   });
 
   const refresh = () => {
@@ -201,6 +234,30 @@ function AdminBookings() {
                     >
                       {PAYMENT_STATUS_LABEL[b.payment_status] ?? b.payment_status}
                     </button>
+                    {(() => {
+                      const r = receiptsByBooking.get(b.id);
+                      if (!r) return null;
+                      return (
+                        <button
+                          type="button"
+                          onClick={() => setReceiptBookingId(b.id)}
+                          className={`mr-1.5 inline-flex items-center gap-1 rounded-full border px-2 py-1 text-[11px] transition ${
+                            r.status === "approved"
+                              ? "border-primary/40 bg-primary/10 text-primary"
+                              : r.status === "rejected"
+                                ? "border-destructive/40 text-destructive"
+                                : "border-amber-400/40 bg-amber-400/10 text-amber-600 hover:bg-amber-400/20"
+                          }`}
+                        >
+                          <ReceiptIcon className="h-3 w-3" />
+                          {r.status === "pending"
+                            ? "رسید در انتظار بررسی"
+                            : r.status === "approved"
+                              ? "رسید تأییدشده"
+                              : "رسید ردشده"}
+                        </button>
+                      );
+                    })()}
                   </TableCell>
                   <TableCell>
                     <div className="flex items-center gap-1">
@@ -254,6 +311,83 @@ function AdminBookings() {
           </Table>
         </div>
       )}
+
+      {(() => {
+        const receipt = receiptBookingId ? receiptsByBooking.get(receiptBookingId) : null;
+        return (
+          <Dialog open={!!receipt} onOpenChange={(open) => !open && setReceiptBookingId(null)}>
+            <DialogContent className="max-w-md">
+              <DialogHeader>
+                <DialogTitle>بررسی رسید پرداخت</DialogTitle>
+                <DialogDescription>
+                  {receipt?.booking ? (
+                    <>
+                      <span className="font-mono" dir="ltr">
+                        {receipt.booking.code}
+                      </span>
+                      {" · "}
+                      {receipt.booking.full_name || "مهمان"}
+                      {" · "}
+                      {toman(receipt.booking.total_amount ?? 0)}
+                    </>
+                  ) : (
+                    "تصویر رسید واریز کارت به کارت"
+                  )}
+                </DialogDescription>
+              </DialogHeader>
+              {receipt && (
+                <img
+                  src={receipt.signedUrl || undefined}
+                  alt="تصویر رسید"
+                  className="max-h-[60vh] w-full rounded-xl border border-hairline bg-surface object-contain"
+                />
+              )}
+              <DialogFooter className="gap-2">
+                {receipt?.status === "pending" ? (
+                  <>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      className="rounded-full text-destructive"
+                      disabled={reviewReceipts.isPending}
+                      onClick={() =>
+                        reviewReceipts.mutate({
+                          receiptId: receipt.id,
+                          action: "reject",
+                        })
+                      }
+                    >
+                      رد رسید
+                    </Button>
+                    <Button
+                      size="sm"
+                      className="rounded-full"
+                      disabled={reviewReceipts.isPending}
+                      onClick={() =>
+                        reviewReceipts.mutate({
+                          receiptId: receipt.id,
+                          action: "approve",
+                        })
+                      }
+                    >
+                      تأیید و نهایی‌کردن
+                    </Button>
+                  </>
+                ) : (
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    className="rounded-full"
+                    onClick={() => setReceiptBookingId(null)}
+                  >
+                    بستن
+                  </Button>
+                )}
+              </DialogFooter>
+            </DialogContent>
+          </Dialog>
+        );
+      })()}
     </div>
   );
 }

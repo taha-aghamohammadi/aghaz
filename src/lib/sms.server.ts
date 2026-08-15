@@ -9,19 +9,17 @@ function toZeroPrefix(phone: string): string {
   return digits.startsWith("0") ? digits : `0${digits}`;
 }
 
-async function sendLimosms(phone: string, code: string): Promise<boolean> {
+async function sendLimosmsTokens(phone: string, otpId: number, tokens: string[]): Promise<boolean> {
   const apiKey = process.env.LIMOSMS_API_KEY;
   if (!apiKey) return false;
-
-  const otpId = Number(process.env.LIMOSMS_OTP_ID ?? 2964);
-  if (!Number.isFinite(otpId)) throw new Error("LIMOSMS_OTP_ID نامعتبر است.");
+  if (!Number.isFinite(otpId)) throw new Error("شناسه پیامک نامعتبر است.");
 
   const res = await fetch("https://api.limosms.com/api/sendpatternmessage", {
     method: "POST",
     headers: { "Content-Type": "application/json", ApiKey: apiKey },
     body: JSON.stringify({
       OtpId: otpId,
-      ReplaceToken: [code],
+      ReplaceToken: tokens,
       MobileNumber: toZeroPrefix(phone),
       Send: true,
     }),
@@ -41,6 +39,10 @@ async function sendLimosms(phone: string, code: string): Promise<boolean> {
   }
   console.info(`[SMS] Limosms sent to ${phone}, cost=${body.TotalAmount}`);
   return true;
+}
+
+async function sendLimosms(phone: string, code: string): Promise<boolean> {
+  return sendLimosmsTokens(phone, Number(process.env.LIMOSMS_OTP_ID ?? 2964), [code]);
 }
 
 async function sendKavenegar(phone: string, code: string): Promise<boolean> {
@@ -83,4 +85,31 @@ export async function sendOtpSms(phone: string, code: string): Promise<boolean> 
 
 export function isSmsConfigured(): boolean {
   return Boolean(process.env.LIMOSMS_API_KEY) || Boolean(process.env.KAVENEGAR_API_KEY);
+}
+
+/**
+ * Approval SMS for card-transfer payments, pattern 2966:
+ *   {0} عزیز/ آغاز در ساعت {1} از روز {2} میزبان شماست
+ * Best-effort: failures are logged but never roll back the approval.
+ */
+export async function sendApprovalSms(input: {
+  phone: string;
+  username: string;
+  hour: string;
+  day: string;
+}): Promise<boolean> {
+  try {
+    const sent = await sendLimosmsTokens(
+      input.phone,
+      Number(process.env.LIMOSMS_APPROVAL_OTP_ID ?? 2966),
+      [input.username, input.hour, input.day],
+    );
+    if (sent) return true;
+  } catch (e) {
+    console.error("[SMS] Limosms approval failed:", e);
+  }
+  console.info(
+    `[SMS demo] approval for ${input.phone}: ${input.username} ${input.hour} ${input.day}`,
+  );
+  return false;
 }

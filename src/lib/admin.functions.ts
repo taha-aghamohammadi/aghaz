@@ -6,12 +6,14 @@ import {
   computeBookingWindow,
   computeTotalAmount,
   DEFAULT_PRICING,
+  expireStalePendingBookings,
   fetchPricingSettings,
   generateBookingCode,
   isDeskAvailable,
   mapPricingRow,
   requireStaff,
   unitPriceForType,
+  type PricingRow,
 } from "@/lib/booking.service";
 
 export const getMyAccess = createServerFn({ method: "GET" })
@@ -41,12 +43,17 @@ export const getAdminOverview = createServerFn({ method: "GET" })
     const [bookings, desks, profiles, tx] = await Promise.all([
       supabase
         .from("bookings")
-        .select("id, code, full_name, desk_code, booking_type, start_at, total_amount, status, payment_status, created_at")
+        .select(
+          "id, code, full_name, desk_code, booking_type, start_at, total_amount, status, payment_status, created_at",
+        )
         .order("created_at", { ascending: false })
         .limit(200),
       supabase.from("desks").select("id, status, is_active"),
       supabase.from("profiles").select("id, created_at"),
-      supabase.from("transactions").select("kind, amount, occurred_on").gte("occurred_on", monthStart.slice(0, 10)),
+      supabase
+        .from("transactions")
+        .select("kind, amount, occurred_on")
+        .gte("occurred_on", monthStart.slice(0, 10)),
     ]);
 
     const rows = bookings.data ?? [];
@@ -58,8 +65,12 @@ export const getAdminOverview = createServerFn({ method: "GET" })
       .filter((b) => new Date(b.created_at) >= new Date(monthStart))
       .reduce((s, b) => s + (b.total_amount ?? 0), 0);
 
-    const income = (tx.data ?? []).filter((t) => t.kind === "income").reduce((s, t) => s + t.amount, 0);
-    const expense = (tx.data ?? []).filter((t) => t.kind === "expense").reduce((s, t) => s + t.amount, 0);
+    const income = (tx.data ?? [])
+      .filter((t) => t.kind === "income")
+      .reduce((s, t) => s + t.amount, 0);
+    const expense = (tx.data ?? [])
+      .filter((t) => t.kind === "expense")
+      .reduce((s, t) => s + t.amount, 0);
 
     const deskRows = desks.data ?? [];
     const byType = {
@@ -108,12 +119,17 @@ export const listBookings = createServerFn({ method: "GET" })
     if (data.status !== "all") query = query.eq("status", data.status);
     if (data.search) {
       const s = data.search.replace(/[%,]/g, "");
-      query = query.or(`code.ilike.%${s}%,full_name.ilike.%${s}%,phone.ilike.%${s}%,desk_code.ilike.%${s}%`);
+      query = query.or(
+        `code.ilike.%${s}%,full_name.ilike.%${s}%,phone.ilike.%${s}%,desk_code.ilike.%${s}%`,
+      );
     }
 
     const { data: rows, error } = await query;
     if (error) throw new Error("خواندن رزروها ناموفق بود.");
-    return rows ?? [];
+    const list = rows ?? [];
+    const cancelled = await expireStalePendingBookings(list);
+    if (cancelled.size === 0) return list;
+    return list.map((r) => (cancelled.has(r.id) ? { ...r, status: "cancelled" } : r));
   });
 
 export const updateBooking = createServerFn({ method: "POST" })
@@ -137,7 +153,8 @@ export const updateBooking = createServerFn({ method: "POST" })
     } = {};
     if (data.status) patch.status = data.status;
     if (data.paymentStatus) patch.payment_status = data.paymentStatus;
-    if (data.checkIn !== undefined) patch.checked_in_at = data.checkIn ? new Date().toISOString() : null;
+    if (data.checkIn !== undefined)
+      patch.checked_in_at = data.checkIn ? new Date().toISOString() : null;
 
     const { error } = await context.supabase.from("bookings").update(patch).eq("id", data.id);
     if (error) throw new Error("به‌روزرسانی رزرو ناموفق بود (دسترسی مدیر لازم است).");
@@ -256,6 +273,8 @@ export const getPricingSettings = createServerFn({ method: "GET" })
         monthlyRate: DEFAULT_PRICING.monthlyRate,
         discountPercent: DEFAULT_PRICING.discountPercent,
         discountEndsAt: DEFAULT_PRICING.discountEndsAt,
+        cardNumber: "",
+        cardHolder: "",
         updatedAt: null as string | null,
         source: "defaults" as const,
       };
@@ -264,6 +283,8 @@ export const getPricingSettings = createServerFn({ method: "GET" })
     const pricing = mapPricingRow(data as PricingRow);
     return {
       ...pricing,
+      cardNumber: (data as PricingRow).card_number ?? "",
+      cardHolder: (data as PricingRow).card_holder ?? "",
       updatedAt: (data as { updated_at?: string }).updated_at ?? null,
       source: "database" as const,
     };
@@ -279,6 +300,8 @@ export const updatePricingSettings = createServerFn({ method: "POST" })
         monthlyRate: z.number().int().min(1).optional(),
         discountPercent: z.number().int().min(0).max(100).optional(),
         discountDurationDays: z.number().int().min(1).max(365).optional(),
+        cardNumber: z.string().trim().max(40).optional(),
+        cardHolder: z.string().trim().max(80).optional(),
       })
       .parse(input),
   )
@@ -291,7 +314,8 @@ export const updatePricingSettings = createServerFn({ method: "POST" })
       data.monthlyRate !== undefined;
     const hasDiscount =
       data.discountPercent !== undefined || data.discountDurationDays !== undefined;
-    if (!hasRate && !hasDiscount) {
+    const hasCard = data.cardNumber !== undefined || data.cardHolder !== undefined;
+    if (!hasRate && !hasDiscount && !hasCard) {
       throw new Error("حداقل یک فیلد برای به‌روزرسانی وارد کنید.");
     }
 
@@ -308,6 +332,8 @@ export const updatePricingSettings = createServerFn({ method: "POST" })
       monthly_rate?: number;
       discount_percent?: number;
       discount_ends_at?: string | null;
+      card_number?: string;
+      card_holder?: string;
       updated_at: string;
     } = { updated_at: new Date().toISOString() };
 
@@ -330,6 +356,9 @@ export const updatePricingSettings = createServerFn({ method: "POST" })
         throw new Error("برای تنظیم مدت تخفیف، ابتدا درصد تخفیف را وارد کنید.");
       }
     }
+
+    if (data.cardNumber !== undefined) patch.card_number = data.cardNumber;
+    if (data.cardHolder !== undefined) patch.card_holder = data.cardHolder;
 
     const { error } = await context.supabase
       .from("pricing_settings")
@@ -362,7 +391,12 @@ export const saveDesk = createServerFn({ method: "POST" })
       name: data.name,
       zone: data.zone,
       status: data.status,
-      features: data.features ? data.features.split("،").map((f) => f.trim()).filter(Boolean) : [],
+      features: data.features
+        ? data.features
+            .split("،")
+            .map((f) => f.trim())
+            .filter(Boolean)
+        : [],
       location_note: data.locationNote,
       is_active: data.isActive,
     };

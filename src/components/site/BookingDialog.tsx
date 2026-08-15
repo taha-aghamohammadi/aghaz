@@ -64,8 +64,7 @@ export function useBooking() {
   return c;
 }
 
-const toFa = (n: number | string) =>
-  String(n).replace(/\d/g, (d) => "۰۱۲۳۴۵۶۷۸۹"[+d]);
+const toFa = (n: number | string) => String(n).replace(/\d/g, (d) => "۰۱۲۳۴۵۶۷۸۹"[+d]);
 
 const HOURS = Array.from(
   { length: BUSINESS_HOUR_END - BUSINESS_HOUR_START },
@@ -145,6 +144,7 @@ export function BookingProvider({ children }: { children: React.ReactNode }) {
   const [confirming, setConfirming] = useState(false);
   const [customerName, setCustomerName] = useState("");
   const [preferredType, setPreferredType] = useState<BookingType | null>(null);
+  const [cardInfo, setCardInfo] = useState({ cardNumber: "", cardHolder: "" });
 
   useEffect(() => {
     let active = true;
@@ -265,6 +265,7 @@ export function BookingProvider({ children }: { children: React.ReactNode }) {
       .then((res) => {
         if (!active) return;
         setPricing(res.pricing);
+        setCardInfo({ cardNumber: res.cardNumber ?? "", cardHolder: res.cardHolder ?? "" });
         if (!selectedDesk) setAvailableDesks(res.desks);
       })
       .catch(() => {
@@ -384,6 +385,8 @@ export function BookingProvider({ children }: { children: React.ReactNode }) {
         total: row.total_amount,
         issuedAt: faJalaliDateTime(new Date()),
         qrDataUrl,
+        cardNumber: cardInfo.cardNumber || undefined,
+        cardHolder: cardInfo.cardHolder || undefined,
         statusLabel: "در انتظار تأیید",
         paymentLabel: "پرداخت‌نشده",
       });
@@ -440,7 +443,9 @@ export function BookingProvider({ children }: { children: React.ReactNode }) {
 
                 <div className="mt-5 flex items-center justify-between rounded-xl border border-hairline bg-surface/60 p-4">
                   <div>
-                    <div className="text-[11px] tracking-widest text-muted-foreground">شماره رزرو</div>
+                    <div className="text-[11px] tracking-widest text-muted-foreground">
+                      شماره رزرو
+                    </div>
                     <div className="mt-1 font-mono text-[16px] font-semibold" dir="ltr">
                       {receipt.code}
                     </div>
@@ -460,7 +465,9 @@ export function BookingProvider({ children }: { children: React.ReactNode }) {
                 </div>
 
                 <div className="mt-4 rounded-xl border border-hairline p-4">
-                  <div className="text-[11px] tracking-widest text-muted-foreground">جزئیات رزرو</div>
+                  <div className="text-[11px] tracking-widest text-muted-foreground">
+                    جزئیات رزرو
+                  </div>
                   <div className="mt-3 space-y-2">
                     <Row label="نام و نام خانوادگی" value={receipt.customerName} />
                     <Row label="پلن" value={receipt.planLabel} />
@@ -477,7 +484,9 @@ export function BookingProvider({ children }: { children: React.ReactNode }) {
                 </div>
 
                 <div className="mt-4 rounded-xl border border-hairline bg-surface/50 p-4">
-                  <div className="text-[11px] tracking-widest text-muted-foreground">خلاصه مبلغ</div>
+                  <div className="text-[11px] tracking-widest text-muted-foreground">
+                    خلاصه مبلغ
+                  </div>
                   <div className="mt-3 space-y-2">
                     <Row
                       label={`تعرفه (${formatToman(receipt.unitPrice)} / ${receipt.unit})`}
@@ -518,7 +527,11 @@ export function BookingProvider({ children }: { children: React.ReactNode }) {
                   )}
                   دانلود رسید PDF
                 </Button>
-                <Button variant="outline" onClick={() => setOpen(false)} className="rounded-full border-hairline">
+                <Button
+                  variant="outline"
+                  onClick={() => setOpen(false)}
+                  className="rounded-full border-hairline"
+                >
                   باشه، تمام
                 </Button>
                 <Button variant="ghost" onClick={() => setReceipt(null)} className="rounded-full">
@@ -584,7 +597,9 @@ export function BookingProvider({ children }: { children: React.ReactNode }) {
           ) : (
             <>
               <div className="max-h-[70vh] overflow-y-auto px-6 py-5">
-                <div className="text-[11px] font-medium tracking-widest text-muted-foreground">نوع رزرو</div>
+                <div className="text-[11px] font-medium tracking-widest text-muted-foreground">
+                  نوع رزرو
+                </div>
                 <div className="mt-2 grid grid-cols-3 gap-2">
                   {types.map((tid) => {
                     const t = typeMeta(pricing, tid);
@@ -730,9 +745,7 @@ export function BookingProvider({ children }: { children: React.ReactNode }) {
                   </div>
                   <div className="mt-2 flex items-center justify-between text-[12.5px] text-muted-foreground">
                     <span>{type === "monthly" ? "شروع" : "تاریخ"}</span>
-                    <span className="text-foreground">
-                      {date ? faJalaliDate(date) : "—"}
-                    </span>
+                    <span className="text-foreground">{date ? faJalaliDate(date) : "—"}</span>
                   </div>
                   {type === "hourly" && (
                     <div className="mt-2 flex items-center justify-between text-[12.5px] text-muted-foreground">
