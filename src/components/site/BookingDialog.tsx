@@ -11,13 +11,14 @@ import {
   CheckCircle2,
   Clock,
   Copy,
-  Download,
   Loader2,
   Minus,
   Plus,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import { PersianCalendar } from "@/components/ui/persian-calendar";
 import { DESK_DISPLAY_META } from "@/components/site/desk-display-meta";
 import {
@@ -30,8 +31,9 @@ import {
 } from "@/components/ui/dialog";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { toast } from "sonner";
-import { buildReceiptHtml, type Receipt } from "@/components/site/receipt-document";
+import { type Receipt } from "@/components/site/receipt-document";
 import { createUserBooking, listPublicDesks, type PublicDesk } from "@/lib/booking.functions";
+import { submitReceipt } from "@/lib/receipt.functions";
 import {
   BUSINESS_HOUR_END,
   BUSINESS_HOUR_START,
@@ -128,6 +130,7 @@ export function BookingProvider({ children }: { children: React.ReactNode }) {
   const navigate = useNavigate();
   const submitBooking = useServerFn(createUserBooking);
   const fetchDesks = useServerFn(listPublicDesks);
+  const sendReceipt = useServerFn(submitReceipt);
 
   const [open, setOpen] = useState(false);
   const [selectedDesk, setSelectedDesk] = useState<PublicDesk | null>(null);
@@ -140,11 +143,14 @@ export function BookingProvider({ children }: { children: React.ReactNode }) {
   const [duration, setDuration] = useState(2);
   const [months, setMonths] = useState(1);
   const [receipt, setReceipt] = useState<Receipt | null>(null);
-  const [downloading, setDownloading] = useState(false);
   const [confirming, setConfirming] = useState(false);
   const [customerName, setCustomerName] = useState("");
   const [preferredType, setPreferredType] = useState<BookingType | null>(null);
   const [cardInfo, setCardInfo] = useState({ cardNumber: "", cardHolder: "" });
+  const [paymentDone, setPaymentDone] = useState(false);
+  const [cardFile, setCardFile] = useState<File | null>(null);
+  const [submittingReceipt, setSubmittingReceipt] = useState(false);
+  const [createdBookingId, setCreatedBookingId] = useState<string | null>(null);
 
   useEffect(() => {
     let active = true;
@@ -204,38 +210,6 @@ export function BookingProvider({ children }: { children: React.ReactNode }) {
     void tryResumePending();
   }, [tryResumePending]);
 
-  const handleDownload = async () => {
-    if (!receipt) return;
-    setDownloading(true);
-    try {
-      const frame = document.createElement("iframe");
-      frame.setAttribute("aria-hidden", "true");
-      frame.style.cssText = "position:fixed;left:-9999px;top:0;width:794px;height:1123px;border:0";
-      document.body.appendChild(frame);
-
-      const doc = frame.contentDocument!;
-      doc.open();
-      doc.write(buildReceiptHtml(receipt, formatToman));
-      doc.close();
-
-      await new Promise((r) => setTimeout(r, 300));
-      try {
-        await (frame.contentDocument as Document & { fonts?: FontFaceSet }).fonts?.ready;
-      } catch {
-        /* font loading API unavailable */
-      }
-
-      frame.contentWindow?.focus();
-      frame.contentWindow?.print();
-      setTimeout(() => frame.remove(), 1000);
-      toast.success("رسید آماده‌ی ذخیره به‌صورت PDF است");
-    } catch {
-      toast.error("ساخت رسید انجام نشد، دوباره تلاش کن");
-    } finally {
-      setDownloading(false);
-    }
-  };
-
   const prepareTier = useCallback((tier: BookingType) => {
     setPreferredType(tier);
   }, []);
@@ -252,6 +226,9 @@ export function BookingProvider({ children }: { children: React.ReactNode }) {
       }
       setDate(new Date());
       setReceipt(null);
+      setPaymentDone(false);
+      setCardFile(null);
+      setCreatedBookingId(null);
       setOpen(true);
     },
     [preferredType],
@@ -339,6 +316,8 @@ export function BookingProvider({ children }: { children: React.ReactNode }) {
           months: type === "monthly" ? months : undefined,
         },
       });
+      setCreatedBookingId(row.id);
+      setPaymentDone(false);
 
       const dateLabel = faJalaliDate(date);
       let details = "";
@@ -400,6 +379,38 @@ export function BookingProvider({ children }: { children: React.ReactNode }) {
     }
   };
 
+  const handleSubmitReceipt = async () => {
+    if (!createdBookingId) {
+      toast.error("رزرو مشخص نشده است.");
+      return;
+    }
+    if (!cardFile) {
+      toast.error("ابتدا تصویر رسید را انتخاب کنید.");
+      return;
+    }
+    setSubmittingReceipt(true);
+    try {
+      const { data: userData } = await supabase.auth.getUser();
+      if (!userData.user) {
+        toast.error("ابتدا وارد شوید.");
+        return;
+      }
+      const ext = cardFile.name.split(".").pop() || "jpg";
+      const path = `${userData.user.id}/${crypto.randomUUID()}.${ext}`;
+      const { error: upErr } = await supabase.storage.from("receipts").upload(path, cardFile, {
+        contentType: cardFile.type || undefined,
+      });
+      if (upErr) throw new Error("آپلود تصویر رسید ناموفق بود.");
+      await sendReceipt({ data: { bookingId: createdBookingId, imagePath: path } });
+      setPaymentDone(true);
+      toast.success("رسید ارسال شد و در انتظار بررسی مدیر است.");
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "ارسال رسید ناموفق بود");
+    } finally {
+      setSubmittingReceipt(false);
+    }
+  };
+
   const types: BookingType[] = ["hourly", "daily", "monthly"];
 
   return (
@@ -413,7 +424,9 @@ export function BookingProvider({ children }: { children: React.ReactNode }) {
             </DialogTitle>
             <DialogDescription className="text-[12.5px]">
               {receipt
-                ? "رزرو شما ثبت شد و در انتظار تأیید پذیرش است."
+                ? paymentDone
+                  ? "رزرو شما ثبت شد و در انتظار تأیید پذیرش است."
+                  : "برای نهایی‌کردن رزرو، رسید واریز را ارسال کنید."
                 : selectedDesk
                   ? `میز ${selectedDesk.code} · ${selectedDesk.zone}`
                   : "یک میز آزاد انتخاب کنید."}
@@ -430,7 +443,127 @@ export function BookingProvider({ children }: { children: React.ReactNode }) {
             )}
           </DialogHeader>
 
-          {receipt ? (
+          {receipt && !paymentDone ? (
+            <>
+              <div className="max-h-[70vh] overflow-y-auto px-6 py-6">
+                <div className="flex flex-col items-center text-center">
+                  <span className="grid h-14 w-14 place-items-center rounded-full bg-primary/10 text-primary ring-1 ring-primary/25">
+                    <CheckCircle2 className="h-7 w-7" />
+                  </span>
+                  <div className="mt-3 text-[15px] font-semibold">رزرو شما ثبت شد</div>
+                  <div className="mt-1 text-[12.5px] text-muted-foreground">
+                    {receipt.issuedAt} · {receipt.code}
+                  </div>
+                </div>
+
+                <div className="mt-5 text-[11px] font-medium tracking-widest text-muted-foreground">
+                  روش پرداخت
+                </div>
+                <div className="mt-2 grid grid-cols-3 gap-2">
+                  <button
+                    type="button"
+                    disabled
+                    className="cursor-not-allowed rounded-xl border border-hairline bg-surface p-3 text-right opacity-50"
+                  >
+                    <div className="text-[13px] font-semibold">پرداخت آنلاین</div>
+                    <div className="mt-1 text-[11px] text-muted-foreground">به‌زودی</div>
+                  </button>
+                  <button
+                    type="button"
+                    disabled
+                    className="cursor-not-allowed rounded-xl border border-hairline bg-surface p-3 text-right opacity-50"
+                  >
+                    <div className="text-[13px] font-semibold">کیف پول</div>
+                    <div className="mt-1 text-[11px] text-muted-foreground">به‌زودی</div>
+                  </button>
+                  <button
+                    type="button"
+                    className="rounded-xl border border-primary/60 bg-primary/5 p-3 text-right ring-1 ring-primary/30"
+                  >
+                    <div className="text-[13px] font-semibold">کارت به کارت</div>
+                    <div className="mt-1 text-[11px] text-foreground/80">واریز و ارسال رسید</div>
+                  </button>
+                </div>
+
+                <div className="mt-6 rounded-xl border border-hairline bg-surface/50 p-4">
+                  <div className="flex items-center justify-between">
+                    <div className="text-[11px] tracking-widest text-muted-foreground">
+                      مبلغ قابل پرداخت
+                    </div>
+                    <div className="text-[16px] font-semibold">{formatToman(receipt.total)}</div>
+                  </div>
+                  {cardInfo.cardNumber ? (
+                    <div className="mt-4">
+                      <div className="text-[11px] tracking-widest text-muted-foreground">
+                        شماره کارت
+                      </div>
+                      <div className="mt-2 flex items-center justify-between rounded-xl border border-hairline bg-background p-3">
+                        <span
+                          className="font-mono text-[18px] font-semibold tracking-widest"
+                          dir="ltr"
+                        >
+                          {toFa(cardInfo.cardNumber)}
+                        </span>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          className="rounded-full border-hairline"
+                          onClick={() => {
+                            navigator.clipboard?.writeText(cardInfo.cardNumber);
+                            toast.success("شماره کارت کپی شد");
+                          }}
+                        >
+                          <Copy className="ml-1.5 h-3.5 w-3.5" />
+                          کپی
+                        </Button>
+                      </div>
+                      {cardInfo.cardHolder && (
+                        <div className="mt-2 text-[13px] font-medium">{cardInfo.cardHolder}</div>
+                      )}
+                    </div>
+                  ) : (
+                    <div className="mt-3 rounded-xl border border-hairline bg-background p-3 text-[12.5px] text-muted-foreground">
+                      شماره کارت هنوز ثبت نشده است.
+                    </div>
+                  )}
+
+                  <div className="mt-4">
+                    <Label htmlFor="receipt-file">تصویر رسید واریز</Label>
+                    <Input
+                      id="receipt-file"
+                      type="file"
+                      accept="image/*"
+                      className="mt-2"
+                      disabled={!cardInfo.cardNumber}
+                      onChange={(e) => setCardFile(e.target.files?.[0] ?? null)}
+                    />
+                  </div>
+                </div>
+
+                <p className="mt-4 text-center text-[11px] text-muted-foreground">
+                  برای ارسال اولیه‌ی رسید فقط ۱۰ دقیقه فرصت دارید.
+                </p>
+              </div>
+
+              <DialogFooter className="flex-row-reverse gap-2 border-t border-hairline bg-surface/40 px-6 py-4">
+                <Button
+                  onClick={handleSubmitReceipt}
+                  disabled={!cardFile || !cardInfo.cardNumber || submittingReceipt}
+                  className="rounded-full"
+                >
+                  {submittingReceipt && <Loader2 className="ml-1.5 h-4 w-4 animate-spin" />}
+                  ارسال رسید
+                </Button>
+                <Button
+                  variant="outline"
+                  onClick={() => setOpen(false)}
+                  className="rounded-full border-hairline"
+                >
+                  بعداً
+                </Button>
+              </DialogFooter>
+            </>
+          ) : receipt ? (
             <>
               <div className="max-h-[70vh] overflow-y-auto px-6 py-6">
                 <div className="flex flex-col items-center text-center">
@@ -479,7 +612,14 @@ export function BookingProvider({ children }: { children: React.ReactNode }) {
                       value={selectedDesk ? `${selectedDesk.code} · ${selectedDesk.name}` : "—"}
                     />
                     <Row label="وضعیت" value={receipt.statusLabel ?? "در انتظار تأیید"} />
-                    <Row label="پرداخت" value={receipt.paymentLabel ?? "پرداخت‌نشده"} />
+                    <Row
+                      label="پرداخت"
+                      value={
+                        paymentDone
+                          ? "در انتظار بررسی مدیر"
+                          : (receipt.paymentLabel ?? "پرداخت‌نشده")
+                      }
+                    />
                   </div>
                 </div>
 
@@ -500,33 +640,9 @@ export function BookingProvider({ children }: { children: React.ReactNode }) {
                     <span className="text-[16px] font-semibold">{formatToman(receipt.total)}</span>
                   </div>
                 </div>
-
-                {receipt.qrDataUrl && (
-                  <div className="mt-4 flex items-center gap-4 rounded-xl border border-hairline p-4">
-                    <img
-                      src={receipt.qrDataUrl}
-                      alt="کد QR چک‌این"
-                      className="h-24 w-24 rounded-lg bg-white p-1 ring-1 ring-hairline"
-                    />
-                    <div>
-                      <div className="text-[13px] font-semibold">چک‌این سریع</div>
-                      <p className="mt-1.5 text-[11.5px] leading-6 text-muted-foreground">
-                        پس از تأیید رزرو، این کد برای ورود قابل استفاده است.
-                      </p>
-                    </div>
-                  </div>
-                )}
               </div>
 
               <DialogFooter className="flex-row-reverse gap-2 border-t border-hairline bg-surface/40 px-6 py-4">
-                <Button onClick={handleDownload} disabled={downloading} className="rounded-full">
-                  {downloading ? (
-                    <Loader2 className="ml-1.5 h-4 w-4 animate-spin" />
-                  ) : (
-                    <Download className="ml-1.5 h-4 w-4" />
-                  )}
-                  دانلود رسید PDF
-                </Button>
                 <Button
                   variant="outline"
                   onClick={() => setOpen(false)}
