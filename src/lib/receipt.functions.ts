@@ -168,7 +168,7 @@ export const reviewReceipt = createServerFn({ method: "POST" })
     await supabaseAdmin
       .from("payment_receipts")
       .update({
-        status: data.action,
+        status: data.action === "approve" ? "approved" : "rejected",
         reviewed_by: context.userId,
         reviewed_at: new Date().toISOString(),
       })
