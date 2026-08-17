@@ -61,10 +61,10 @@ export const listPublicDesks = createServerFn({ method: "GET" })
     ]);
 
     if (desksRes.error) throw new Error("خواندن میزها ناموفق بود.");
-    const bookings = bookingsRes.data ?? [];
-    const desks = (desksRes.data ?? []).map((d) =>
-      mapPublicDesk(d, bookings, windowStart, windowEnd),
-    );
+    const cancelled = await expireStalePendingBookings(bookingsRes.data ?? []);
+    const bookings = (bookingsRes.data ?? []).filter((b) => !cancelled.has(b.id));
+    const nowIso = now.toISOString();
+    const desks = (desksRes.data ?? []).map((d) => mapPublicDesk(d, bookings, nowIso, nowIso));
     const card = await supabaseAdmin
       .from("pricing_settings")
       .select("card_number, card_holder")

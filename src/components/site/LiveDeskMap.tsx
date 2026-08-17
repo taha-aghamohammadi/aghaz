@@ -40,21 +40,25 @@ export function LiveDeskMap() {
 
   useEffect(() => {
     let active = true;
-    void fetchDesks({ data: {} })
-      .then((res) => {
-        if (active) {
-          setDesks(res.desks);
-          setPricing(res.pricing);
-        }
-      })
-      .catch(() => {
-        if (active) setDesks([]);
-      })
-      .finally(() => {
-        if (active) setLoading(false);
-      });
+    const load = () =>
+      void fetchDesks({ data: {} })
+        .then((res) => {
+          if (active) {
+            setDesks(res.desks);
+            setPricing(res.pricing);
+          }
+        })
+        .catch(() => {
+          if (active) setDesks([]);
+        })
+        .finally(() => {
+          if (active) setLoading(false);
+        });
+    load();
+    const timer = setInterval(load, 60_000);
     return () => {
       active = false;
+      clearInterval(timer);
     };
   }, [fetchDesks]);
 
@@ -62,7 +66,10 @@ export function LiveDeskMap() {
   const meta = selected ? DESK_DISPLAY_META[selected.displayStatus] : null;
 
   return (
-    <section id="desks" className="scroll-mt-24 border-b border-hairline bg-surface/40 py-24 md:py-32">
+    <section
+      id="desks"
+      className="scroll-mt-24 border-b border-hairline bg-surface/40 py-24 md:py-32"
+    >
       <div className="mx-auto max-w-7xl px-6">
         <div className="grid gap-10 md:grid-cols-[0.85fr_1.15fr] md:items-center">
           <div>
@@ -70,9 +77,12 @@ export function LiveDeskMap() {
               <span className="inline-flex h-1.5 w-1.5 animate-pulse-dot rounded-full bg-success" />
               ظرفیت لحظه‌ای
             </div>
-            <h2 className="mt-4 text-4xl font-semibold tracking-tight md:text-5xl">ببین چی خالیه، همین الان.</h2>
+            <h2 className="mt-4 text-4xl font-semibold tracking-tight md:text-5xl">
+              ببین چی خالیه، همین الان.
+            </h2>
             <p className="mt-4 max-w-md text-[15px] leading-relaxed text-muted-foreground">
-              نقشه‌ی میزهای اشتراکی آغاز از داده‌ی واقعی سامانه به‌روز می‌شود. روی هر میز بزن و رزرو کن.
+              نقشه‌ی میزهای اشتراکی آغاز از داده‌ی واقعی سامانه به‌روز می‌شود. روی هر میز بزن و رزرو
+              کن.
             </p>
             <div className="mt-6 flex items-baseline gap-2">
               <span className="text-5xl font-semibold tracking-tight">{toFa(free)}</span>
@@ -123,7 +133,9 @@ export function LiveDeskMap() {
                           <span className="text-[13.5px] font-semibold">{d.name}</span>
                           <span className={`h-2 w-2 shrink-0 rounded-full ${deskMeta.dot}`} />
                         </div>
-                        <div className="mt-1 truncate text-[11px] text-muted-foreground">{d.zone}</div>
+                        <div className="mt-1 truncate text-[11px] text-muted-foreground">
+                          {d.zone}
+                        </div>
                         <div className="mt-3 text-[11px] text-foreground/70">
                           {isFree ? "مشاهده و رزرو" : deskMeta.label}
                         </div>
@@ -160,7 +172,9 @@ export function LiveDeskMap() {
                     <MapPin className="h-3.5 w-3.5" />
                     کد میز
                   </div>
-                  <div className="mt-1.5 text-[14px]" dir="ltr">{selected.code}</div>
+                  <div className="mt-1.5 text-[14px]" dir="ltr">
+                    {selected.code}
+                  </div>
                 </div>
 
                 {selected.features.length > 0 && (
@@ -179,7 +193,9 @@ export function LiveDeskMap() {
 
                 <div className="flex items-center justify-between gap-3 rounded-2xl border border-hairline bg-surface/50 px-4 py-3">
                   <span className="text-[12px] text-muted-foreground">تعرفه ساعتی</span>
-                  <span className="text-[14px] font-semibold">{toman(unitPriceForType(pricing, "hourly"))}</span>
+                  <span className="text-[14px] font-semibold">
+                    {toman(unitPriceForType(pricing, "hourly"))}
+                  </span>
                 </div>
 
                 <Button
@@ -190,7 +206,9 @@ export function LiveDeskMap() {
                     open({ type: preferredType ?? "hourly", desk: selected });
                   }}
                 >
-                  {selected.displayStatus === "free" ? "رزرو این میز" : "این میز فعلاً در دسترس نیست"}
+                  {selected.displayStatus === "free"
+                    ? "رزرو این میز"
+                    : "این میز فعلاً در دسترس نیست"}
                 </Button>
               </div>
             </>
