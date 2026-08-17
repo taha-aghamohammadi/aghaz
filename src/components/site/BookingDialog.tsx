@@ -301,6 +301,11 @@ export function BookingProvider({ children }: { children: React.ReactNode }) {
     if (dateIsToday && startHour < minStartHour) setStartHour(minStartHour);
   }, [dateIsToday, minStartHour, startHour]);
 
+  useEffect(() => {
+    const maxDuration = Math.min(12, BUSINESS_HOUR_END - startHour);
+    if (duration > maxDuration) setDuration(maxDuration);
+  }, [startHour, duration]);
+
   const handleConfirm = async () => {
     if (!selectedDesk) {
       toast.error("ابتدا یک میز از نقشه انتخاب کنید");

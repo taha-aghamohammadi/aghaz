@@ -180,12 +180,16 @@ export const reviewReceipt = createServerFn({ method: "POST" })
         .update({ payment_status: "paid", status: "confirmed" })
         .eq("id", booking.id);
 
-      const start = new Date(booking.start_at);
+      const iso = booking.start_at;
+      const hour = Number(iso.slice(11, 13));
+      const day = formatJalali(new Date(`${iso.slice(0, 10)}T12:00:00`), "d MMMM yyyy", {
+        locale: faIRJalali,
+      });
       await sendApprovalSms({
         phone: booking.phone,
         username: booking.full_name || "کاربر",
-        hour: toFa(formatJalali(start, "H", { locale: faIRJalali })),
-        day: toFa(formatJalali(start, "d MMMM yyyy", { locale: faIRJalali })),
+        hour: toFa(hour),
+        day: toFa(day),
       });
     }
 
