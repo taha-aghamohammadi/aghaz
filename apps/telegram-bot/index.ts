@@ -1,9 +1,10 @@
 /**
- * Telegram bot for آغاز — link account, list bookings, receive notifications.
+ * Telegram bot for آغاز — link account, receive notifications, pick channel.
  * Run: node --import tsx apps/telegram-bot/index.ts
  */
 
 import { createClient } from "@supabase/supabase-js";
+import type { Database } from "../../src/integrations/supabase/types";
 
 const token = process.env.TELEGRAM_BOT_TOKEN;
 if (!token) {
@@ -11,7 +12,7 @@ if (!token) {
   process.exit(1);
 }
 
-const supabase = createClient(
+const supabase = createClient<Database>(
   process.env.SUPABASE_URL!,
   process.env.SUPABASE_SERVICE_ROLE_KEY!,
 );
@@ -33,58 +34,79 @@ async function send(chatId: number, text: string) {
   await tg("sendMessage", { chat_id: chatId, text });
 }
 
+async function handleLinkToken(chatId: number, fromId: number, linkToken: string) {
+  const { data: link } = await supabase
+    .from("telegram_link_tokens")
+    .select("user_id")
+    .eq("token", linkToken)
+    .is("used_at", null)
+    .gt("expires_at", new Date().toISOString())
+    .maybeSingle();
+
+  if (!link) {
+    await send(
+      chatId,
+      "لینک اتصال نامعتبر یا منقضی شده است. از صفحه «حساب من» دوباره یک لینک جدید بسازید.",
+    );
+    return;
+  }
+
+  await supabase
+    .from("profiles")
+    .update({ telegram_id: fromId, telegram_linked_at: new Date().toISOString() })
+    .eq("id", link.user_id);
+  await supabase
+    .from("telegram_link_tokens")
+    .update({ used_at: new Date().toISOString() })
+    .eq("token", linkToken);
+
+  await send(
+    chatId,
+    "✅ حساب شما به تلگرام متصل شد. از این پس کدها و اعلان‌ها اینجا ارسال می‌شوند.",
+  );
+}
+
+async function handlePref(chatId: number, fromId: number, choice: string | undefined) {
+  if (choice !== "sms" && choice !== "telegram") {
+    await send(chatId, "نحوه دریافت اعلان را انتخاب کنید:\n/pref telegram\n/pref sms");
+    return;
+  }
+  const { data: profile } = await supabase
+    .from("profiles")
+    .select("id")
+    .eq("telegram_id", fromId)
+    .maybeSingle();
+  if (!profile) {
+    await send(chatId, "ابتدا حساب را از صفحه «حساب من» متصل کنید.");
+    return;
+  }
+  await supabase.from("profiles").update({ notification_pref: choice }).eq("id", profile.id);
+  await send(chatId, choice === "telegram" ? "کانال اعلان: تلگرام ✅" : "کانال اعلان: پیامک");
+}
+
 async function handleMessage(chatId: number, text: string, fromId: number) {
   const parts = text.trim().split(/\s+/);
   const cmd = parts[0]?.toLowerCase();
 
   if (cmd === "/start") {
+    if (parts[1]) {
+      await handleLinkToken(chatId, fromId, parts[1]);
+      return;
+    }
     await send(
       chatId,
-      "سلام! به ربات آغاز خوش آمدید.\n/link <کد-۶-رقمی> — اتصال حساب\n/my — رزروهای من\n/help — راهنما",
+      "سلام! به ربات آغاز خوش آمدید.\nحساب خود را از صفحه «حساب من» در وب‌سایت آغاز متصل کنید.\n\n/pref telegram — اعلان در تلگرام\n/pref sms — اعلان با پیامک\n/my — رزروهای من\n/help — راهنما",
     );
     return;
   }
 
   if (cmd === "/help") {
-    await send(chatId, "دستورات: /start /link /my /help");
+    await send(chatId, "دستورات: /start /pref /my /help");
     return;
   }
 
-  if (cmd === "/link") {
-    const code = parts[1];
-    if (!code || code.length < 4) {
-      await send(chatId, "کد اتصال را وارد کنید: /link 123456");
-      return;
-    }
-    const { data: otp } = await supabase
-      .from("phone_otps")
-      .select("phone")
-      .eq("code_hash", code)
-      .limit(1)
-      .maybeSingle();
-
-    if (!otp?.phone) {
-      await send(chatId, "کد نامعتبر است. از وب‌سایت کد OTP فعال را وارد کنید یا با پشتیبانی تماس بگیرید.");
-      return;
-    }
-
-    const { data: profile } = await supabase
-      .from("profiles")
-      .select("id")
-      .eq("phone", otp.phone)
-      .maybeSingle();
-
-    if (!profile) {
-      await send(chatId, "حساب کاربری برای این شماره پیدا نشد.");
-      return;
-    }
-
-    await supabase
-      .from("profiles")
-      .update({ telegram_id: fromId, telegram_linked_at: new Date().toISOString() })
-      .eq("id", profile.id);
-
-    await send(chatId, "حساب شما با موفقیت متصل شد.");
+  if (cmd === "/pref") {
+    await handlePref(chatId, fromId, parts[1]?.toLowerCase());
     return;
   }
 
@@ -96,7 +118,7 @@ async function handleMessage(chatId: number, text: string, fromId: number) {
       .maybeSingle();
 
     if (!profile) {
-      await send(chatId, "ابتدا حساب را با /link متصل کنید.");
+      await send(chatId, "ابتدا حساب را از صفحه «حساب من» متصل کنید.");
       return;
     }
 
@@ -133,7 +155,7 @@ async function poll() {
 }
 
 console.info("[telegram-bot] polling...");
-// eslint-disable-next-line no-constant-condition
+
 while (true) {
   try {
     await poll();

@@ -216,6 +216,7 @@ export type Database = {
           id: string;
           job_title: string;
           national_id: string;
+          notification_pref: string;
           phone: string;
           telegram_id: number | null;
           telegram_linked_at: string | null;
@@ -228,6 +229,7 @@ export type Database = {
           id: string;
           job_title?: string;
           national_id?: string;
+          notification_pref?: string;
           phone?: string;
           telegram_id?: number | null;
           telegram_linked_at?: string | null;
@@ -240,12 +242,45 @@ export type Database = {
           id?: string;
           job_title?: string;
           national_id?: string;
+          notification_pref?: string;
           phone?: string;
           telegram_id?: number | null;
           telegram_linked_at?: string | null;
           updated_at?: string;
         };
         Relationships: [];
+      };
+      telegram_link_tokens: {
+        Row: {
+          created_at: string;
+          expires_at: string;
+          token: string;
+          used_at: string | null;
+          user_id: string;
+        };
+        Insert: {
+          created_at?: string;
+          expires_at: string;
+          token: string;
+          used_at?: string | null;
+          user_id: string;
+        };
+        Update: {
+          created_at?: string;
+          expires_at?: string;
+          token?: string;
+          used_at?: string | null;
+          user_id?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "telegram_link_tokens_user_id_fkey";
+            columns: ["user_id"];
+            isOneToOne: false;
+            referencedRelation: "users";
+            referencedColumns: ["id"];
+          },
+        ];
       };
       payment_receipts: {
         Row: {

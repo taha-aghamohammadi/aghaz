@@ -113,3 +113,29 @@ export async function sendApprovalSms(input: {
   );
   return false;
 }
+
+/**
+ * Booking status SMS, pattern LIMOSMS_BOOKING_OTP_ID (optional — set in env
+ * once the pattern is defined in Limosms). Best-effort; demo logs otherwise.
+ */
+export async function sendBookingSms(input: {
+  phone: string;
+  code: string;
+  status: string;
+  type: string;
+}): Promise<boolean> {
+  const otpId = Number(process.env.LIMOSMS_BOOKING_OTP_ID);
+  if (!Number.isFinite(otpId)) {
+    console.info(
+      `[SMS demo] booking for ${input.phone}: ${input.type} ${input.code} ${input.status}`,
+    );
+    return false;
+  }
+  try {
+    const sent = await sendLimosmsTokens(input.phone, otpId, [input.code, input.status]);
+    if (sent) return true;
+  } catch (e) {
+    console.error("[SMS] Limosms booking failed:", e);
+  }
+  return false;
+}

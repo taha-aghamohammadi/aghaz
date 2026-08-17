@@ -9,7 +9,6 @@ import {
   requireStaff,
   PRICING_SETTINGS_ID,
 } from "@/lib/booking.service";
-import { sendApprovalSms } from "@/lib/sms.server";
 import { toFa } from "@/lib/fa-format";
 
 /** Card-transfer info served to any authenticated user. */
@@ -185,11 +184,15 @@ export const reviewReceipt = createServerFn({ method: "POST" })
       const day = formatJalali(new Date(`${iso.slice(0, 10)}T12:00:00`), "d MMMM yyyy", {
         locale: faIRJalali,
       });
-      await sendApprovalSms({
+      const username = booking.full_name || "کاربر";
+      const { notifyUser } = await import("@/lib/notify.server");
+      await notifyUser({
+        supabase: supabaseAdmin,
+        userId: receipt.user_id,
         phone: booking.phone,
-        username: booking.full_name || "کاربر",
-        hour: toFa(hour),
-        day: toFa(day),
+        kind: "approval",
+        text: `${username} عزیز، آغاز در ساعت ${toFa(hour)} از روز ${toFa(day)} میزبان شماست.`,
+        approval: { username, hour: toFa(hour), day: toFa(day) },
       });
     }
 

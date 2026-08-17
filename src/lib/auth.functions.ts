@@ -39,12 +39,19 @@ export const requestPhoneOtp = createServerFn({ method: "POST" })
       education: null,
     });
 
-    const { sendOtpSms } = await import("@/lib/sms.server");
+    const { notifyUser } = await import("@/lib/notify.server");
     let smsSent = false;
     try {
-      smsSent = await sendOtpSms(phone, code);
+      const result = await notifyUser({
+        supabase: supabaseAdmin,
+        phone,
+        kind: "otp",
+        text: `کد ورود شما به آغاز: ${code}`,
+        otpCode: code,
+      });
+      smsSent = result.sent;
     } catch (e) {
-      console.error("[OTP] SMS failed:", e);
+      console.error("[OTP] send failed:", e);
     }
 
     const isDev = process.env.NODE_ENV !== "production";
@@ -64,9 +71,8 @@ export const requestPhoneOtp = createServerFn({ method: "POST" })
 export const verifyPhoneOtp = createServerFn({ method: "POST" })
   .inputValidator((input: unknown) => verifySchema.parse(input))
   .handler(async ({ data }) => {
-    const { normalizePhone, consumeOtp, issueSessionToken, isRegisteredProfile } = await import(
-      "@/lib/auth.server"
-    );
+    const { normalizePhone, consumeOtp, issueSessionToken, isRegisteredProfile } =
+      await import("@/lib/auth.server");
     const phone = normalizePhone(data.phone);
     if (!phone) throw new Error("شماره موبایل معتبر نیست.");
 

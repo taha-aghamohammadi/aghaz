@@ -12,6 +12,7 @@ import {
   LogOut,
   Pencil,
   Phone,
+  Send,
   User,
   XCircle,
 } from "lucide-react";
@@ -31,6 +32,7 @@ import {
 import { Toaster } from "@/components/ui/sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { updateMyProfile } from "@/lib/auth.functions";
+import { createTelegramLink, updateNotificationPref } from "@/lib/telegram.functions";
 import { normalizeNationalId } from "@/lib/national-id";
 import { cancelMyBooking } from "@/lib/booking.functions";
 import { listMyBookings } from "@/lib/booking.functions";
@@ -196,7 +198,9 @@ function AccountPage() {
       if (!userData.user) return null;
       const { data } = await supabase
         .from("profiles")
-        .select("full_name, phone, national_id, job_title, education, created_at")
+        .select(
+          "full_name, phone, national_id, job_title, education, created_at, telegram_id, notification_pref",
+        )
         .eq("id", userData.user.id)
         .maybeSingle();
       return data;
@@ -221,6 +225,24 @@ function AccountPage() {
       await queryClient.invalidateQueries({ queryKey: ["profile"] });
     },
     onError: (e) => toast.error(e instanceof Error ? e.message : "ذخیره اطلاعات ناموفق بود."),
+  });
+
+  const createLink = useMutation({
+    mutationFn: () => createTelegramLink(),
+    onSuccess: (res) => {
+      window.open(res.url, "_blank", "noopener");
+      toast.success("در تلگرام روی Start بزنید تا اتصال کامل شود.");
+    },
+    onError: (e) => toast.error(e.message),
+  });
+
+  const changePref = useMutation({
+    mutationFn: (pref: "telegram" | "sms") => updateNotificationPref({ data: { pref } }),
+    onSuccess: async () => {
+      toast.success("تنظیمات اعلان ذخیره شد.");
+      await queryClient.invalidateQueries({ queryKey: ["profile"] });
+    },
+    onError: (e) => toast.error(e.message),
   });
 
   async function signOut() {
@@ -424,6 +446,57 @@ function AccountPage() {
               ))}
             </dl>
           )}
+        </div>
+
+        <div className="mt-8 rounded-2xl border border-hairline bg-background p-6">
+          <h2 className="text-lg font-semibold tracking-tight">کانال اعلان</h2>
+          <p className="mt-1 text-[13px] text-muted-foreground">
+            کد ورود، تأیید رزرو و وضعیت‌ها از این مسیر ارسال می‌شوند (تلگرام پیش‌فرض است).
+          </p>
+          <div className="mt-5">
+            {profile?.telegram_id ? (
+              <div className="space-y-4">
+                <div className="flex items-center gap-2 text-[13.5px] font-medium">
+                  <Send className="h-4 w-4 text-muted-foreground" />
+                  متصل به تلگرام
+                </div>
+                <div className="flex flex-wrap gap-2">
+                  <Button
+                    size="sm"
+                    className="h-9 rounded-full"
+                    variant={profile.notification_pref === "sms" ? "outline" : "default"}
+                    disabled={changePref.isPending}
+                    onClick={() => changePref.mutate("telegram")}
+                  >
+                    تلگرام
+                  </Button>
+                  <Button
+                    size="sm"
+                    className="h-9 rounded-full"
+                    variant={profile.notification_pref === "sms" ? "default" : "outline"}
+                    disabled={changePref.isPending}
+                    onClick={() => changePref.mutate("sms")}
+                  >
+                    پیامک
+                  </Button>
+                </div>
+              </div>
+            ) : (
+              <Button
+                size="sm"
+                className="h-9 rounded-full"
+                disabled={createLink.isPending}
+                onClick={() => createLink.mutate()}
+              >
+                {createLink.isPending ? (
+                  <Loader2 className="ml-1.5 h-4 w-4 animate-spin" />
+                ) : (
+                  <Send className="ml-1.5 h-4 w-4" />
+                )}
+                اتصال تلگرام
+              </Button>
+            )}
+          </div>
         </div>
 
         <div className="mt-8 rounded-2xl border border-hairline bg-background p-6">

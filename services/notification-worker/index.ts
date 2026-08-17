@@ -2,11 +2,14 @@
  * Notification delivery worker.
  * Run: node --import tsx services/notification-worker/index.ts
  *
- * Polls pending notifications and marks them sent (web channel logs;
- * telegram channel requires TELEGRAM_BOT_TOKEN and linked profiles).
+ * Polls pending notifications and delivers them via the shared channel-aware
+ * layer (Telegram first, SMS fallback). Undeliverable rows are logged and
+ * marked sent — best-effort, notifications never block the queue.
  */
 
 import { createClient } from "@supabase/supabase-js";
+import type { Database } from "../../src/integrations/supabase/types";
+import { notifyUser } from "../../src/lib/notify.server";
 
 const POLL_MS = 15_000;
 
@@ -16,59 +19,43 @@ function env(name: string): string {
   return v;
 }
 
-async function sendTelegram(chatId: number, text: string) {
-  const token = process.env.TELEGRAM_BOT_TOKEN;
-  if (!token) return false;
-  const res = await fetch(`https://api.telegram.org/bot${token}/sendMessage`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ chat_id: chatId, text }),
-  });
-  return res.ok;
-}
-
-async function tick(supabase: ReturnType<typeof createClient>) {
+async function tick(supabase: ReturnType<typeof createClient<Database>>) {
   const { data: rows } = await supabase
     .from("notifications")
-    .select("id, user_id, channel, type, payload")
+    .select("id, user_id, type, payload")
     .eq("status", "pending")
     .order("created_at", { ascending: true })
     .limit(50);
 
   for (const row of rows ?? []) {
-    let delivered = false;
+    const payload = row.payload as { code?: string; status?: string };
+    const text = `آغاز: ${row.type}\nکد: ${payload.code ?? ""}\nوضعیت: ${payload.status ?? ""}`;
+    const { sent } = await notifyUser({
+      supabase,
+      userId: row.user_id,
+      kind: "booking",
+      text,
+      booking: {
+        code: payload.code ?? "",
+        status: payload.status ?? "",
+        type: row.type,
+      },
+    });
 
-    if (row.channel === "web") {
+    if (!sent) {
       console.info(`[notify:web] user=${row.user_id} type=${row.type}`);
-      delivered = true;
     }
-
-    if (row.channel === "telegram" && row.user_id) {
-      const { data: profile } = await supabase
-        .from("profiles")
-        .select("telegram_id")
-        .eq("id", row.user_id)
-        .maybeSingle();
-      if (profile?.telegram_id) {
-        const payload = row.payload as { code?: string; status?: string };
-        const text = `آغاز: ${row.type}\nکد: ${payload.code ?? ""}\nوضعیت: ${payload.status ?? ""}`;
-        delivered = await sendTelegram(profile.telegram_id, text);
-      }
-    }
-
-    if (delivered) {
-      await supabase
-        .from("notifications")
-        .update({ status: "sent", sent_at: new Date().toISOString() })
-        .eq("id", row.id);
-    }
+    await supabase
+      .from("notifications")
+      .update({ status: "sent", sent_at: new Date().toISOString() })
+      .eq("id", row.id);
   }
 }
 
 async function main() {
-  const supabase = createClient(env("SUPABASE_URL"), env("SUPABASE_SERVICE_ROLE_KEY"));
+  const supabase = createClient<Database>(env("SUPABASE_URL"), env("SUPABASE_SERVICE_ROLE_KEY"));
   console.info("[notification-worker] started");
-  // eslint-disable-next-line no-constant-condition
+
   while (true) {
     try {
       await tick(supabase);

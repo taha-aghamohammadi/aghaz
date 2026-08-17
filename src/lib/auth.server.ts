@@ -1,6 +1,7 @@
 // Server-only helpers for phone + OTP authentication.
 
 import { toEnDigits, normalizeNationalId } from "@/lib/national-id";
+import { defaultChannel } from "@/lib/notify.server";
 
 export { normalizeNationalId };
 
@@ -91,8 +92,7 @@ export async function consumeOtp(phone: string, code: string) {
   if (!row) throw new Error("کدی برای این شماره پیدا نشد. دوباره درخواست کنید.");
   if (new Date(row.expires_at).getTime() < Date.now())
     throw new Error("کد منقضی شده است. کد جدید بگیرید.");
-  if (row.attempts >= MAX_ATTEMPTS)
-    throw new Error("تعداد تلاش‌ها زیاد بود. کد جدید بگیرید.");
+  if (row.attempts >= MAX_ATTEMPTS) throw new Error("تعداد تلاش‌ها زیاد بود. کد جدید بگیرید.");
 
   const matches = row.code_hash === (await hashCode(phone, code));
   if (!matches) {
@@ -155,8 +155,8 @@ export async function issueSessionToken(
     job_title: details.jobTitle || existing.data?.job_title || "",
     education: details.education || existing.data?.education || "",
     phone,
+    ...(existing.data ? {} : { notification_pref: defaultChannel() }),
   });
 
   return { emailOtp: data.properties.email_otp, email };
 }
-
