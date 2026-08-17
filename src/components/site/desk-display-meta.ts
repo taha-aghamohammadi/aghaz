@@ -20,3 +20,14 @@ export const DESK_DISPLAY_META: Record<
     cell: "border-destructive/30 bg-destructive/10 hover:bg-destructive/15",
   },
 };
+
+export type DeskAvailabilityMode = "now" | "window" | "week";
+
+export const DESK_LABELS: Record<
+  DeskAvailabilityMode,
+  Record<PublicDesk["displayStatus"], string>
+> = {
+  now: { free: "آزاد", held: "رزرو شده", busy: "پر" },
+  window: { free: "آزاد در این بازه", held: "رزرو در این بازه", busy: "پر" },
+  week: { free: "آزاد", held: "رزرو", busy: "پر" },
+};

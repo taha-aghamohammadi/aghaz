@@ -107,6 +107,19 @@ function assertFutureStart(startAt: string): void {
   }
 }
 
+export type BookingWindow = { startAt: string; endAt: string; units: number };
+
+/** Non-throwing computeBookingWindow for UI pre-checks; null when past/invalid. */
+export function tryBuildWindow(
+  input: Parameters<typeof computeBookingWindow>[0],
+): BookingWindow | null {
+  try {
+    return computeBookingWindow(input);
+  } catch {
+    return null;
+  }
+}
+
 export function mapPricingRow(row: PricingRow): PricingTiers {
   return {
     hourlyRate: row.hourly_rate,

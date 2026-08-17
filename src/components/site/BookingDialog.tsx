@@ -20,7 +20,11 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { PersianCalendar } from "@/components/ui/persian-calendar";
-import { DESK_DISPLAY_META } from "@/components/site/desk-display-meta";
+import {
+  DESK_DISPLAY_META,
+  DESK_LABELS,
+  type DeskAvailabilityMode,
+} from "@/components/site/desk-display-meta";
 import {
   Dialog,
   DialogContent,
@@ -32,12 +36,19 @@ import {
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { toast } from "sonner";
 import { type Receipt } from "@/components/site/receipt-document";
-import { createUserBooking, listPublicDesks, type PublicDesk } from "@/lib/booking.functions";
+import {
+  checkDeskAvailability,
+  createUserBooking,
+  listPublicDesks,
+  type PublicDesk,
+} from "@/lib/booking.functions";
 import { submitReceipt } from "@/lib/receipt.functions";
 import {
   BUSINESS_HOUR_END,
   BUSINESS_HOUR_START,
   DEFAULT_PRICING,
+  iranDateTime,
+  tryBuildWindow,
   unitPriceForType,
   type PricingTiers,
 } from "@/lib/booking.service";
@@ -64,6 +75,16 @@ type Ctx = {
 const BookingCtx = createContext<Ctx | null>(null);
 
 const PENDING_BOOKING_KEY = "aghaz_pending_booking";
+const AVAILABILITY_MODE_KEY = "aghaz_availability_mode";
+
+type AvailabilityMode = "now" | "deskFirst" | "timeFirst" | "week";
+
+const AVAILABILITY_MODES: { id: AvailabilityMode; label: string; hint: string }[] = [
+  { id: "now", label: "لحظه‌ای", hint: "وضعیت همین حالا" },
+  { id: "deskFirst", label: "اول میز", hint: "میز بعد از زمان" },
+  { id: "timeFirst", label: "اول زمان", hint: "زمان بعد از میز" },
+  { id: "week", label: "هفته", hint: "نمای ۷ روزه" },
+];
 
 export function useBooking() {
   const c = useContext(BookingCtx);
@@ -131,10 +152,36 @@ function DeskLegend({ color, label }: { color: string; label: string }) {
   );
 }
 
+function FilterChip({
+  active,
+  onClick,
+  children,
+}: {
+  active: boolean;
+  onClick: () => void;
+  children: React.ReactNode;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={cn(
+        "rounded-full border px-3 py-1 text-[11.5px] transition",
+        active
+          ? "border-primary/60 bg-primary/10 text-primary"
+          : "border-hairline bg-card text-muted-foreground hover:bg-surface",
+      )}
+    >
+      {children}
+    </button>
+  );
+}
+
 export function BookingProvider({ children }: { children: React.ReactNode }) {
   const navigate = useNavigate();
   const submitBooking = useServerFn(createUserBooking);
   const fetchDesks = useServerFn(listPublicDesks);
+  const fetchAvailability = useServerFn(checkDeskAvailability);
   const sendReceipt = useServerFn(submitReceipt);
 
   const [open, setOpen] = useState(false);
@@ -156,6 +203,29 @@ export function BookingProvider({ children }: { children: React.ReactNode }) {
   const [cardFile, setCardFile] = useState<File | null>(null);
   const [submittingReceipt, setSubmittingReceipt] = useState(false);
   const [createdBookingId, setCreatedBookingId] = useState<string | null>(null);
+
+  const [availabilityMode, setAvailabilityMode] = useState<AvailabilityMode>(() => {
+    if (typeof window === "undefined") return "timeFirst";
+    const saved = window.localStorage.getItem(AVAILABILITY_MODE_KEY);
+    return saved === "now" || saved === "deskFirst" || saved === "week" || saved === "timeFirst"
+      ? saved
+      : "timeFirst";
+  });
+  const changeMode = (m: AvailabilityMode) => {
+    setAvailabilityMode(m);
+    try {
+      window.localStorage.setItem(AVAILABILITY_MODE_KEY, m);
+    } catch {
+      /* ignore */
+    }
+  };
+
+  const [zoneFilter, setZoneFilter] = useState("");
+  const [featureFilter, setFeatureFilter] = useState("");
+  const [weekData, setWeekData] = useState<{ date: Date; dateStr: string; desks: PublicDesk[] }[]>(
+    [],
+  );
+  const [weekLoading, setWeekLoading] = useState(false);
 
   useEffect(() => {
     let active = true;
@@ -239,29 +309,90 @@ export function BookingProvider({ children }: { children: React.ReactNode }) {
     [preferredType],
   );
 
+  const bookingWindow = useMemo(() => {
+    if (!date) return null;
+    return tryBuildWindow({
+      bookingType: type,
+      dateStr: format(date, "yyyy-MM-dd"),
+      startHour: type === "hourly" ? startHour : undefined,
+      duration: type !== "monthly" ? duration : undefined,
+      months: type === "monthly" ? months : undefined,
+    });
+  }, [type, date, startHour, duration, months]);
+
   useEffect(() => {
     if (!open || receipt) return;
     let active = true;
-    if (!selectedDesk) setDesksLoading(true);
-    void fetchDesks({ data: {} })
-      .then((res) => {
-        if (!active) return;
-        setPricing(res.pricing);
-        setCardInfo({ cardNumber: res.cardNumber ?? "", cardHolder: res.cardHolder ?? "" });
-        if (!selectedDesk) setAvailableDesks(res.desks);
+    const load = (params: { windowStart?: string; windowEnd?: string }) =>
+      fetchDesks({ data: params })
+        .then((res) => {
+          if (!active) return;
+          setPricing(res.pricing);
+          setCardInfo({ cardNumber: res.cardNumber ?? "", cardHolder: res.cardHolder ?? "" });
+          setAvailableDesks(res.desks);
+        })
+        .catch(() => {
+          if (!active) return;
+          setPricing(DEFAULT_PRICING);
+          setAvailableDesks([]);
+        })
+        .finally(() => {
+          if (active) setDesksLoading(false);
+        });
+    setDesksLoading(true);
+    const win = bookingWindow;
+    const needsWindow =
+      win !== null &&
+      availabilityMode !== "now" &&
+      (availabilityMode === "timeFirst" || selectedDesk !== null);
+    if (needsWindow) {
+      const t = setTimeout(
+        () => void load({ windowStart: win.startAt, windowEnd: win.endAt }),
+        300,
+      );
+      return () => {
+        active = false;
+        clearTimeout(t);
+      };
+    }
+    void load({});
+    return () => {
+      active = false;
+    };
+  }, [open, selectedDesk, receipt, fetchDesks, availabilityMode, bookingWindow]);
+
+  useEffect(() => {
+    if (!open || receipt || availabilityMode !== "week") return;
+    let active = true;
+    setWeekLoading(true);
+    const days: { date: Date; dateStr: string }[] = Array.from({ length: 7 }, (_, i) => {
+      const d = new Date();
+      d.setDate(d.getDate() + i);
+      return { date: d, dateStr: format(d, "yyyy-MM-dd") };
+    });
+    Promise.all(
+      days.map((d) =>
+        fetchDesks({
+          data: {
+            windowStart: iranDateTime(d.dateStr, BUSINESS_HOUR_START),
+            windowEnd: iranDateTime(d.dateStr, BUSINESS_HOUR_END),
+          },
+        }).then((res) => ({ ...d, desks: res.desks })),
+      ),
+    )
+      .then((data) => {
+        if (active) setWeekData(data);
       })
       .catch(() => {
-        if (!active) return;
-        setPricing(DEFAULT_PRICING);
-        if (!selectedDesk) setAvailableDesks([]);
+        if (active) setWeekData([]);
       })
       .finally(() => {
-        if (active && !selectedDesk) setDesksLoading(false);
+        if (active) setWeekLoading(false);
       });
     return () => {
       active = false;
     };
-  }, [open, selectedDesk, receipt, fetchDesks]);
+  }, [open, receipt, availabilityMode, fetchDesks]);
 
   const ctx = useMemo(
     () => ({ open: openFn, preferredType, prepareTier }),
@@ -278,6 +409,40 @@ export function BookingProvider({ children }: { children: React.ReactNode }) {
   }, [type, duration, months, current, selectedDesk]);
 
   const endHour = Math.min(BUSINESS_HOUR_END, startHour + duration);
+
+  const allZones = useMemo(
+    () => Array.from(new Set(availableDesks.map((d) => d.zone).filter(Boolean))).sort(),
+    [availableDesks],
+  );
+  const allFeatures = useMemo(
+    () => Array.from(new Set(availableDesks.flatMap((d) => d.features))).sort(),
+    [availableDesks],
+  );
+  const filteredDesks = useMemo(
+    () =>
+      availableDesks.filter(
+        (d) =>
+          (!zoneFilter || d.zone === zoneFilter) &&
+          (!featureFilter || d.features.includes(featureFilter)),
+      ),
+    [availableDesks, zoneFilter, featureFilter],
+  );
+
+  const labelsMode: DeskAvailabilityMode = availabilityMode === "timeFirst" ? "window" : "now";
+
+  const types: BookingType[] = ["hourly", "daily", "monthly"];
+
+  const weekDesks = useMemo(() => {
+    const map = new Map<string, PublicDesk>();
+    weekData.forEach((d) => d.desks.forEach((desk) => map.set(desk.id, desk)));
+    return Array.from(map.values());
+  }, [weekData]);
+
+  const deskConflict =
+    availabilityMode === "deskFirst" &&
+    selectedDesk !== null &&
+    !desksLoading &&
+    availableDesks.some((d) => d.id === selectedDesk.id && d.displayStatus !== "free");
 
   const tehranNow = useMemo(() => {
     const parts = new Intl.DateTimeFormat("en-CA", {
@@ -298,13 +463,237 @@ export function BookingProvider({ children }: { children: React.ReactNode }) {
     : BUSINESS_HOUR_START;
 
   useEffect(() => {
-    if (dateIsToday && startHour < minStartHour) setStartHour(minStartHour);
-  }, [dateIsToday, minStartHour, startHour]);
+    if (!dateIsToday) return;
+    if (minStartHour >= BUSINESS_HOUR_END) {
+      const next = new Date(date);
+      next.setDate(next.getDate() + 1);
+      setDate(next);
+      return;
+    }
+    if (startHour < minStartHour) setStartHour(minStartHour);
+  }, [dateIsToday, minStartHour, startHour, date]);
 
   useEffect(() => {
     const maxDuration = Math.min(12, BUSINESS_HOUR_END - startHour);
     if (duration > maxDuration) setDuration(maxDuration);
   }, [startHour, duration]);
+
+  const deskGrid = (
+    <div>
+      <div className="text-[11px] font-medium tracking-widest text-muted-foreground">
+        انتخاب میز
+      </div>
+      <div className="mt-2 flex flex-wrap gap-3">
+        <DeskLegend color="bg-success" label={DESK_LABELS[labelsMode].free} />
+        <DeskLegend color="bg-warning" label={DESK_LABELS[labelsMode].held} />
+        <DeskLegend color="bg-destructive" label={DESK_LABELS[labelsMode].busy} />
+      </div>
+      {(allZones.length > 0 || allFeatures.length > 0) && (
+        <div className="mt-3 flex flex-wrap items-center gap-1.5">
+          <FilterChip active={!zoneFilter} onClick={() => setZoneFilter("")}>
+            همه‌ی میزها
+          </FilterChip>
+          {allZones.map((z) => (
+            <FilterChip key={z} active={zoneFilter === z} onClick={() => setZoneFilter(z)}>
+              {z}
+            </FilterChip>
+          ))}
+          {allFeatures.map((f) => (
+            <FilterChip key={f} active={featureFilter === f} onClick={() => setFeatureFilter(f)}>
+              {f}
+            </FilterChip>
+          ))}
+        </div>
+      )}
+      {desksLoading ? (
+        <div className="flex items-center justify-center gap-2 py-10 text-[13px] text-muted-foreground">
+          <Loader2 className="h-4 w-4 animate-spin" />
+          بارگذاری میزها…
+        </div>
+      ) : filteredDesks.length === 0 ? (
+        <p className="py-10 text-center text-[13px] text-muted-foreground">
+          میزی مطابق فیلتر پیدا نشد.
+        </p>
+      ) : (
+        <div className="mt-3 grid gap-2 sm:grid-cols-2">
+          {filteredDesks.map((d) => {
+            const meta = DESK_DISPLAY_META[d.displayStatus];
+            const isFree = d.displayStatus === "free";
+            return (
+              <button
+                key={d.id}
+                type="button"
+                disabled={!isFree}
+                onClick={() => setSelectedDesk(d)}
+                className={cn(
+                  "rounded-xl border p-3 text-right transition",
+                  meta.cell,
+                  isFree ? "cursor-pointer" : "cursor-not-allowed opacity-85",
+                )}
+              >
+                <div className="flex items-center justify-between gap-2">
+                  <span className="text-[13.5px] font-semibold">{d.name}</span>
+                  <span className={cn("h-2.5 w-2.5 shrink-0 rounded-full", meta.dot)} />
+                </div>
+                <div className="mt-1 flex items-center justify-between gap-2">
+                  <span className="text-[11px] text-muted-foreground">{d.zone}</span>
+                  <span className="text-[11px] font-medium text-foreground/80">
+                    {DESK_LABELS[labelsMode][d.displayStatus]}
+                  </span>
+                </div>
+                <div className="mt-1 text-[11px] text-muted-foreground" dir="ltr">
+                  {d.code}
+                </div>
+              </button>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+
+  const timeControls = (
+    <>
+      <div className="text-[11px] font-medium tracking-widest text-muted-foreground">نوع رزرو</div>
+      <div className="mt-2 grid grid-cols-3 gap-2">
+        {types.map((tid) => {
+          const t = typeMeta(pricing, tid);
+          const active = tid === type;
+          return (
+            <button
+              key={tid}
+              type="button"
+              onClick={() => setType(tid)}
+              className={cn(
+                "rounded-xl border p-3 text-right transition",
+                active
+                  ? "border-primary/60 bg-primary/5 ring-1 ring-primary/30"
+                  : "border-hairline bg-card hover:bg-surface",
+              )}
+            >
+              <div className="flex items-center justify-between">
+                <span className="text-[13.5px] font-semibold">{t.label}</span>
+                {active && (
+                  <span className="grid h-4 w-4 place-items-center rounded-full bg-primary text-primary-foreground">
+                    <Check className="h-2.5 w-2.5" />
+                  </span>
+                )}
+              </div>
+              <div className="mt-1 text-[11px] text-muted-foreground">{t.hint}</div>
+              <div className="mt-2 text-[11.5px] text-foreground/80">
+                {formatToman(t.price)}
+                <span className="text-muted-foreground"> / {t.unit}</span>
+              </div>
+            </button>
+          );
+        })}
+      </div>
+
+      <div className="mt-6 text-[11px] font-medium tracking-widest text-muted-foreground">
+        {type === "monthly" ? "تاریخ شروع اشتراک" : "تاریخ رزرو"}
+      </div>
+      <Popover>
+        <PopoverTrigger asChild>
+          <Button
+            variant="outline"
+            className={cn(
+              "mt-2 w-full justify-start rounded-xl border-hairline text-right font-normal",
+              !date && "text-muted-foreground",
+            )}
+          >
+            <CalendarIcon className="ml-2 h-4 w-4" />
+            {date ? faJalaliDate(date) : "تاریخ رو انتخاب کن"}
+          </Button>
+        </PopoverTrigger>
+        <PopoverContent className="w-auto p-0" align="start">
+          <PersianCalendar
+            mode="single"
+            selected={date}
+            onSelect={setDate}
+            disabled={(d) => {
+              const today = new Date();
+              today.setHours(0, 0, 0, 0);
+              return d < today;
+            }}
+            initialFocus
+            className={cn("p-3 pointer-events-auto")}
+          />
+        </PopoverContent>
+      </Popover>
+
+      {type === "hourly" && (
+        <>
+          <div className="mt-6 text-[11px] font-medium tracking-widest text-muted-foreground">
+            ساعت شروع
+          </div>
+          <div className="mt-2 grid grid-cols-5 gap-1.5 sm:grid-cols-7" dir="ltr">
+            {HOURS.map((h) => {
+              const active = h === startHour;
+              const isPast = dateIsToday && h < minStartHour;
+              return (
+                <button
+                  key={h}
+                  type="button"
+                  disabled={isPast}
+                  onClick={() => setStartHour(h)}
+                  className={cn(
+                    "rounded-lg border px-2 py-1.5 text-[12px] transition",
+                    active
+                      ? "border-primary/60 bg-primary text-primary-foreground"
+                      : isPast
+                        ? "cursor-not-allowed border-hairline bg-card text-muted-foreground/40"
+                        : "border-hairline bg-card hover:bg-surface",
+                  )}
+                >
+                  {toFa(h)}:۰۰
+                </button>
+              );
+            })}
+          </div>
+
+          <Stepper
+            className="mt-5"
+            label="مدت زمان"
+            value={duration}
+            min={1}
+            max={Math.min(12, BUSINESS_HOUR_END - startHour)}
+            onChange={setDuration}
+            suffix="ساعت"
+          />
+          <div className="mt-3 inline-flex items-center gap-1.5 rounded-full border border-hairline bg-surface/60 px-2.5 py-1 text-[11.5px] text-muted-foreground">
+            <Clock className="h-3 w-3" />
+            <span dir="ltr">
+              {toFa(startHour)}:۰۰ – {toFa(endHour)}:۰۰
+            </span>
+          </div>
+        </>
+      )}
+
+      {type === "daily" && (
+        <Stepper
+          className="mt-6"
+          label="تعداد روز"
+          value={duration}
+          min={1}
+          max={30}
+          onChange={setDuration}
+          suffix="روز"
+        />
+      )}
+
+      {type === "monthly" && (
+        <Stepper
+          className="mt-6"
+          label="مدت اشتراک"
+          value={months}
+          min={1}
+          max={12}
+          onChange={setMonths}
+          suffix="ماه"
+        />
+      )}
+    </>
+  );
 
   const handleConfirm = async () => {
     if (!selectedDesk) {
@@ -338,6 +727,22 @@ export function BookingProvider({ children }: { children: React.ReactNode }) {
     setConfirming(true);
     try {
       const dateStr = format(date, "yyyy-MM-dd");
+      if (availabilityMode === "now") {
+        const check = await fetchAvailability({
+          data: {
+            deskId: selectedDesk.id,
+            bookingType: type,
+            dateStr,
+            startHour: type === "hourly" ? startHour : undefined,
+            duration: type !== "monthly" ? duration : undefined,
+            months: type === "monthly" ? months : undefined,
+          },
+        });
+        if (!check.available) {
+          toast.error("این میز در بازه‌ی انتخابی رزرو شده است.");
+          return;
+        }
+      }
       const row = await submitBooking({
         data: {
           deskId: selectedDesk.id,
@@ -443,8 +848,6 @@ export function BookingProvider({ children }: { children: React.ReactNode }) {
     }
   };
 
-  const types: BookingType[] = ["hourly", "daily", "monthly"];
-
   return (
     <BookingCtx.Provider value={ctx}>
       {children}
@@ -461,7 +864,11 @@ export function BookingProvider({ children }: { children: React.ReactNode }) {
                   : "برای نهایی‌کردن رزرو، رسید واریز را ارسال کنید."
                 : selectedDesk
                   ? `میز ${selectedDesk.code} · ${selectedDesk.zone}`
-                  : "یک میز آزاد انتخاب کنید."}
+                  : availabilityMode === "timeFirst"
+                    ? "اول نوع رزرو و بازه رو انتخاب کن، بعد میزت رو ببین."
+                    : availabilityMode === "week"
+                      ? "هفته‌ی پیش رو رو ببین و میز و روز آزادت رو انتخاب کن."
+                      : "یک میز آزاد انتخاب کنید."}
             </DialogDescription>
             {selectedDesk && !receipt && (
               <Button
@@ -474,6 +881,31 @@ export function BookingProvider({ children }: { children: React.ReactNode }) {
               </Button>
             )}
           </DialogHeader>
+
+          {!receipt && (
+            <div className="border-b border-hairline px-6 py-3">
+              <div className="grid grid-cols-4 gap-1 rounded-full border border-hairline bg-surface/60 p-1">
+                {AVAILABILITY_MODES.map((m) => {
+                  const active = m.id === availabilityMode;
+                  return (
+                    <button
+                      key={m.id}
+                      type="button"
+                      onClick={() => changeMode(m.id)}
+                      className={cn(
+                        "rounded-full px-1 py-1.5 text-[12px] transition",
+                        active
+                          ? "bg-primary text-primary-foreground shadow-sm"
+                          : "text-muted-foreground hover:bg-surface",
+                      )}
+                    >
+                      {m.label}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          )}
 
           {receipt && !paymentDone ? (
             <>
@@ -698,204 +1130,90 @@ export function BookingProvider({ children }: { children: React.ReactNode }) {
                 </Button>
               </DialogFooter>
             </>
-          ) : !selectedDesk ? (
+          ) : availabilityMode === "week" && !selectedDesk ? (
             <div className="max-h-[70vh] overflow-y-auto px-6 py-5">
-              <div className="text-[11px] font-medium tracking-widest text-muted-foreground">
-                انتخاب میز
+              <div className="flex items-center justify-between">
+                <div className="text-[11px] font-medium tracking-widest text-muted-foreground">
+                  میز در هفته‌ی پیش رو
+                </div>
+                {weekLoading && <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />}
               </div>
-              <div className="mt-2 flex flex-wrap gap-3">
-                <DeskLegend color="bg-success" label={DESK_DISPLAY_META.free.label} />
-                <DeskLegend color="bg-warning" label={DESK_DISPLAY_META.held.label} />
-                <DeskLegend color="bg-destructive" label={DESK_DISPLAY_META.busy.label} />
-              </div>
-              {desksLoading ? (
+              {weekLoading ? (
                 <div className="flex items-center justify-center gap-2 py-10 text-[13px] text-muted-foreground">
                   <Loader2 className="h-4 w-4 animate-spin" />
-                  بارگذاری میزها…
+                  بارگذاری هفته…
                 </div>
-              ) : availableDesks.length === 0 ? (
+              ) : weekData.length === 0 ? (
                 <p className="py-10 text-center text-[13px] text-muted-foreground">
                   میز فعالی در سامانه ثبت نشده است.
                 </p>
               ) : (
-                <div className="mt-3 grid gap-2 sm:grid-cols-2">
-                  {availableDesks.map((d) => {
-                    const meta = DESK_DISPLAY_META[d.displayStatus];
-                    const isFree = d.displayStatus === "free";
-                    return (
-                      <button
-                        key={d.id}
-                        type="button"
-                        disabled={!isFree}
-                        onClick={() => setSelectedDesk(d)}
-                        className={cn(
-                          "rounded-xl border p-3 text-right transition",
-                          meta.cell,
-                          isFree ? "cursor-pointer" : "cursor-not-allowed opacity-85",
-                        )}
-                      >
-                        <div className="flex items-center justify-between gap-2">
-                          <span className="text-[13.5px] font-semibold">{d.name}</span>
-                          <span className={cn("h-2.5 w-2.5 shrink-0 rounded-full", meta.dot)} />
+                <div className="mt-3 overflow-x-auto">
+                  <div className="grid min-w-[560px] grid-cols-[1.1fr_repeat(7,1fr)] gap-1.5">
+                    <div />
+                    {weekData.map((d) => (
+                      <div key={d.dateStr} className="text-center">
+                        <div className="text-[11px] font-medium">
+                          {new Intl.DateTimeFormat("fa-IR", { weekday: "short" }).format(d.date)}
                         </div>
-                        <div className="mt-1 flex items-center justify-between gap-2">
-                          <span className="text-[11px] text-muted-foreground">{d.zone}</span>
-                          <span className="text-[11px] font-medium text-foreground/80">
-                            {meta.label}
-                          </span>
+                        <div className="text-[10px] text-muted-foreground">
+                          {faJalaliDate(d.date).split(" ").slice(0, -1).join(" ")}
                         </div>
-                        <div className="mt-1 text-[11px] text-muted-foreground" dir="ltr">
-                          {d.code}
+                      </div>
+                    ))}
+                    {weekDesks.map((desk) => (
+                      <div key={desk.id} className="contents">
+                        <div className="flex min-h-0 flex-col justify-center gap-0.5 py-1">
+                          <span className="truncate text-[12px] font-semibold">{desk.name}</span>
+                          <span className="text-[10px] text-muted-foreground">{desk.code}</span>
                         </div>
-                      </button>
-                    );
-                  })}
+                        {weekData.map((d) => {
+                          const dayDesk = d.desks.find((dd) => dd.id === desk.id);
+                          const status = dayDesk?.displayStatus ?? "busy";
+                          const meta = DESK_DISPLAY_META[status];
+                          const free = status === "free";
+                          return (
+                            <button
+                              key={d.dateStr}
+                              type="button"
+                              disabled={!free}
+                              onClick={() => {
+                                setDate(d.date);
+                                setSelectedDesk(desk);
+                              }}
+                              className={cn(
+                                "grid min-h-9 place-items-center rounded-lg border text-[11px] transition",
+                                meta.cell,
+                                free
+                                  ? "cursor-pointer hover:ring-1 hover:ring-primary"
+                                  : "cursor-not-allowed opacity-70",
+                              )}
+                            >
+                              {free ? (
+                                <Check className="h-3.5 w-3.5 text-success" />
+                              ) : (
+                                <span className="text-[10px] text-muted-foreground">
+                                  {DESK_LABELS.week[status]}
+                                </span>
+                              )}
+                            </button>
+                          );
+                        })}
+                      </div>
+                    ))}
+                  </div>
                 </div>
               )}
+            </div>
+          ) : !selectedDesk ? (
+            <div className="max-h-[70vh] overflow-y-auto px-6 py-5">
+              {availabilityMode === "timeFirst" && <div className="space-y-6">{timeControls}</div>}
+              {deskGrid}
             </div>
           ) : (
             <>
               <div className="max-h-[70vh] overflow-y-auto px-6 py-5">
-                <div className="text-[11px] font-medium tracking-widest text-muted-foreground">
-                  نوع رزرو
-                </div>
-                <div className="mt-2 grid grid-cols-3 gap-2">
-                  {types.map((tid) => {
-                    const t = typeMeta(pricing, tid);
-                    const active = tid === type;
-                    return (
-                      <button
-                        key={tid}
-                        type="button"
-                        onClick={() => setType(tid)}
-                        className={cn(
-                          "rounded-xl border p-3 text-right transition",
-                          active
-                            ? "border-primary/60 bg-primary/5 ring-1 ring-primary/30"
-                            : "border-hairline bg-card hover:bg-surface",
-                        )}
-                      >
-                        <div className="flex items-center justify-between">
-                          <span className="text-[13.5px] font-semibold">{t.label}</span>
-                          {active && (
-                            <span className="grid h-4 w-4 place-items-center rounded-full bg-primary text-primary-foreground">
-                              <Check className="h-2.5 w-2.5" />
-                            </span>
-                          )}
-                        </div>
-                        <div className="mt-1 text-[11px] text-muted-foreground">{t.hint}</div>
-                        <div className="mt-2 text-[11.5px] text-foreground/80">
-                          {formatToman(t.price)}
-                          <span className="text-muted-foreground"> / {t.unit}</span>
-                        </div>
-                      </button>
-                    );
-                  })}
-                </div>
-
-                <div className="mt-6 text-[11px] font-medium tracking-widest text-muted-foreground">
-                  {type === "monthly" ? "تاریخ شروع اشتراک" : "تاریخ رزرو"}
-                </div>
-                <Popover>
-                  <PopoverTrigger asChild>
-                    <Button
-                      variant="outline"
-                      className={cn(
-                        "mt-2 w-full justify-start rounded-xl border-hairline text-right font-normal",
-                        !date && "text-muted-foreground",
-                      )}
-                    >
-                      <CalendarIcon className="ml-2 h-4 w-4" />
-                      {date ? faJalaliDate(date) : "تاریخ رو انتخاب کن"}
-                    </Button>
-                  </PopoverTrigger>
-                  <PopoverContent className="w-auto p-0" align="start">
-                    <PersianCalendar
-                      mode="single"
-                      selected={date}
-                      onSelect={setDate}
-                      disabled={(d) => {
-                        const today = new Date();
-                        today.setHours(0, 0, 0, 0);
-                        return d < today;
-                      }}
-                      initialFocus
-                      className={cn("p-3 pointer-events-auto")}
-                    />
-                  </PopoverContent>
-                </Popover>
-
-                {type === "hourly" && (
-                  <>
-                    <div className="mt-6 text-[11px] font-medium tracking-widest text-muted-foreground">
-                      ساعت شروع
-                    </div>
-                    <div className="mt-2 grid grid-cols-5 gap-1.5 sm:grid-cols-7" dir="ltr">
-                      {HOURS.map((h) => {
-                        const active = h === startHour;
-                        const isPast = dateIsToday && h < minStartHour;
-                        return (
-                          <button
-                            key={h}
-                            type="button"
-                            disabled={isPast}
-                            onClick={() => setStartHour(h)}
-                            className={cn(
-                              "rounded-lg border px-2 py-1.5 text-[12px] transition",
-                              active
-                                ? "border-primary/60 bg-primary text-primary-foreground"
-                                : isPast
-                                  ? "cursor-not-allowed border-hairline bg-card text-muted-foreground/40"
-                                  : "border-hairline bg-card hover:bg-surface",
-                            )}
-                          >
-                            {toFa(h)}:۰۰
-                          </button>
-                        );
-                      })}
-                    </div>
-
-                    <Stepper
-                      className="mt-5"
-                      label="مدت زمان"
-                      value={duration}
-                      min={1}
-                      max={Math.min(12, BUSINESS_HOUR_END - startHour)}
-                      onChange={setDuration}
-                      suffix="ساعت"
-                    />
-                    <div className="mt-3 inline-flex items-center gap-1.5 rounded-full border border-hairline bg-surface/60 px-2.5 py-1 text-[11.5px] text-muted-foreground">
-                      <Clock className="h-3 w-3" />
-                      <span dir="ltr">
-                        {toFa(startHour)}:۰۰ – {toFa(endHour)}:۰۰
-                      </span>
-                    </div>
-                  </>
-                )}
-
-                {type === "daily" && (
-                  <Stepper
-                    className="mt-6"
-                    label="تعداد روز"
-                    value={duration}
-                    min={1}
-                    max={30}
-                    onChange={setDuration}
-                    suffix="روز"
-                  />
-                )}
-
-                {type === "monthly" && (
-                  <Stepper
-                    className="mt-6"
-                    label="مدت اشتراک"
-                    value={months}
-                    min={1}
-                    max={12}
-                    onChange={setMonths}
-                    suffix="ماه"
-                  />
-                )}
+                <div className="space-y-6">{timeControls}</div>
 
                 <div className="mt-6 rounded-xl border border-hairline bg-surface/50 p-4">
                   <div className="flex items-center justify-between text-[12.5px] text-muted-foreground">
@@ -927,7 +1245,16 @@ export function BookingProvider({ children }: { children: React.ReactNode }) {
               </div>
 
               <DialogFooter className="flex-row-reverse gap-2 border-t border-hairline bg-surface/40 px-6 py-4">
-                <Button onClick={handleConfirm} disabled={confirming} className="rounded-full">
+                {deskConflict && (
+                  <div className="w-full rounded-lg border border-destructive/30 bg-destructive/10 px-3 py-2 text-[12px] text-destructive">
+                    میز {selectedDesk.code} در بازه‌ی انتخابی رزرو شده است. میز دیگری انتخاب کن.
+                  </div>
+                )}
+                <Button
+                  onClick={handleConfirm}
+                  disabled={confirming || deskConflict}
+                  className="rounded-full"
+                >
                   {confirming ? (
                     <Loader2 className="ml-1.5 h-4 w-4 animate-spin" />
                   ) : (
