@@ -41,7 +41,12 @@ import {
   unitPriceForType,
   type PricingTiers,
 } from "@/lib/booking.service";
-import { faJalaliDate, faJalaliDateTime } from "@/lib/fa-format";
+import {
+  faJalaliDate,
+  faJalaliDateTime,
+  formatCardNumber,
+  validateReceiptFile,
+} from "@/lib/fa-format";
 import QRCode from "qrcode";
 
 export type BookingType = "hourly" | "daily" | "monthly";
@@ -274,6 +279,28 @@ export function BookingProvider({ children }: { children: React.ReactNode }) {
 
   const endHour = Math.min(BUSINESS_HOUR_END, startHour + duration);
 
+  const tehranNow = useMemo(() => {
+    const parts = new Intl.DateTimeFormat("en-CA", {
+      timeZone: "Asia/Tehran",
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit",
+      hour: "2-digit",
+      hourCycle: "h23",
+    }).formatToParts(new Date());
+    const get = (t: string) => parts.find((p) => p.type === t)?.value ?? "0";
+    return { dateStr: `${get("year")}-${get("month")}-${get("day")}`, hour: Number(get("hour")) };
+  }, []);
+
+  const dateIsToday = !!date && format(date, "yyyy-MM-dd") === tehranNow.dateStr;
+  const minStartHour = dateIsToday
+    ? Math.max(BUSINESS_HOUR_START, tehranNow.hour + 1)
+    : BUSINESS_HOUR_START;
+
+  useEffect(() => {
+    if (dateIsToday && startHour < minStartHour) setStartHour(minStartHour);
+  }, [dateIsToday, minStartHour, startHour]);
+
   const handleConfirm = async () => {
     if (!selectedDesk) {
       toast.error("ابتدا یک میز از نقشه انتخاب کنید");
@@ -502,7 +529,7 @@ export function BookingProvider({ children }: { children: React.ReactNode }) {
                           className="font-mono text-[18px] font-semibold tracking-widest"
                           dir="ltr"
                         >
-                          {toFa(cardInfo.cardNumber)}
+                          {toFa(formatCardNumber(cardInfo.cardNumber))}
                         </span>
                         <Button
                           variant="outline"
@@ -535,7 +562,18 @@ export function BookingProvider({ children }: { children: React.ReactNode }) {
                       accept="image/*"
                       className="mt-2"
                       disabled={!cardInfo.cardNumber}
-                      onChange={(e) => setCardFile(e.target.files?.[0] ?? null)}
+                      onChange={(e) => {
+                        const file = e.target.files?.[0] ?? null;
+                        if (file) {
+                          const err = validateReceiptFile(file);
+                          if (err) {
+                            toast.error(err);
+                            setCardFile(null);
+                            return;
+                          }
+                        }
+                        setCardFile(file);
+                      }}
                     />
                   </div>
                 </div>
@@ -790,16 +828,20 @@ export function BookingProvider({ children }: { children: React.ReactNode }) {
                     <div className="mt-2 grid grid-cols-5 gap-1.5 sm:grid-cols-7" dir="ltr">
                       {HOURS.map((h) => {
                         const active = h === startHour;
+                        const isPast = dateIsToday && h < minStartHour;
                         return (
                           <button
                             key={h}
                             type="button"
+                            disabled={isPast}
                             onClick={() => setStartHour(h)}
                             className={cn(
                               "rounded-lg border px-2 py-1.5 text-[12px] transition",
                               active
                                 ? "border-primary/60 bg-primary text-primary-foreground"
-                                : "border-hairline bg-card hover:bg-surface",
+                                : isPast
+                                  ? "cursor-not-allowed border-hairline bg-card text-muted-foreground/40"
+                                  : "border-hairline bg-card hover:bg-surface",
                             )}
                           >
                             {toFa(h)}:۰۰

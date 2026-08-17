@@ -42,7 +42,9 @@ import {
   BOOKING_TYPE_LABEL,
   PAYMENT_STATUS_LABEL,
   faDateTime,
+  formatCardNumber,
   toman,
+  validateReceiptFile,
 } from "@/lib/fa-format";
 import { logo } from "@/lib/site-assets";
 
@@ -569,7 +571,7 @@ function AccountPage() {
             <div className="rounded-2xl border border-hairline bg-surface p-4">
               <div className="text-[12px] text-muted-foreground">شماره کارت</div>
               <div className="mt-1 font-mono text-[20px] font-semibold tracking-widest" dir="ltr">
-                {toFa(cardTransferInfo.data.cardNumber)}
+                {toFa(formatCardNumber(cardTransferInfo.data.cardNumber))}
               </div>
               {cardTransferInfo.data.cardHolder && (
                 <div className="mt-2 text-[13px] font-medium">
@@ -584,7 +586,18 @@ function AccountPage() {
             id="receipt-file"
             type="file"
             accept="image/*"
-            onChange={(e) => setCardFile(e.target.files?.[0] ?? null)}
+            onChange={(e) => {
+              const file = e.target.files?.[0] ?? null;
+              if (file) {
+                const err = validateReceiptFile(file);
+                if (err) {
+                  toast.error(err);
+                  setCardFile(null);
+                  return;
+                }
+              }
+              setCardFile(file);
+            }}
           />
 
           <DialogFooter className="gap-2">

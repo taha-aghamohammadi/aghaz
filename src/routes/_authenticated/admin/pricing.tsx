@@ -7,6 +7,7 @@ import { toast } from "sonner";
 import { getPricingSettings, updatePricingSettings } from "@/lib/admin.functions";
 import {
   faDateTime,
+  formatCardNumber,
   formatPriceWithCommas,
   parsePriceAmount,
   stripPriceDigits,
@@ -14,9 +15,9 @@ import {
 } from "@/lib/fa-format";
 import {
   applyDiscount,
+  DEFAULT_PRICING,
   isDiscountActive,
   unitPriceForType,
-  DEFAULT_PRICING,
   type BookingType,
 } from "@/lib/booking.service";
 import { Button } from "@/components/ui/button";
@@ -412,7 +413,10 @@ function AdminPricing() {
                 <Label className="text-[11px] text-muted-foreground">
                   شماره کارت
                   {pricing.cardNumber && (
-                    <span className="text-foreground/70"> · فعلی {pricing.cardNumber}</span>
+                    <span className="text-foreground/70">
+                      {" "}
+                      · فعلی {formatCardNumber(pricing.cardNumber)}
+                    </span>
                   )}
                 </Label>
                 <Input

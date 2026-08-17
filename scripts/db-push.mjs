@@ -13,6 +13,19 @@ import { fileURLToPath } from "node:url";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const root = path.join(__dirname, "..");
+for (const line of fs.readFileSync(path.join(root, ".env"), "utf8").split("\n")) {
+  const m = line.match(/^\s*([A-Za-z_][A-Za-z0-9_]*)\s*=\s*(.*)$/);
+  if (!m) continue;
+  let value = m[2].trim();
+  if (
+    (value.startsWith('"') && value.endsWith('"')) ||
+    (value.startsWith("'") && value.endsWith("'"))
+  ) {
+    value = value.slice(1, -1);
+  }
+  if (process.env[m[1]] === undefined) process.env[m[1]] = value;
+}
+
 const projectRef =
   process.env.SUPABASE_PROJECT_ID?.trim() || "anratgfyidasufaccslj";
 const region = process.env.SUPABASE_DB_REGION?.trim() || "ap-northeast-2";

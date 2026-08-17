@@ -27,6 +27,22 @@ export function faNumber(v: number) {
   return toFa(v.toLocaleString("en-US"));
 }
 
+/** 16-digit card → "1234-5678-9012-3456"; no-op otherwise. Display only. */
+export function formatCardNumber(card: string): string {
+  const digits = toEnDigits(card);
+  if (digits.length !== 16) return card;
+  return digits.replace(/(\d{4})(?=\d)/g, "$1-");
+}
+
+export const MAX_RECEIPT_FILE_SIZE = 5 * 1024 * 1024;
+
+/** Returns an error message when the file is rejected, else null. */
+export function validateReceiptFile(file: File): string | null {
+  if (!file.type.startsWith("image/")) return "فقط تصویر قابل آپلود است.";
+  if (file.size > MAX_RECEIPT_FILE_SIZE) return "حجم تصویر نباید بیشتر از ۵ مگابایت باشد.";
+  return null;
+}
+
 export function toman(v: number) {
   return `${faNumber(v)} تومان`;
 }
