@@ -61,10 +61,15 @@ OTP_DEMO_MODE=true
 ZARINPAL_MERCHANT_ID=
 ZARINPAL_SANDBOX=true
 TELEGRAM_BOT_TOKEN=
+TELEGRAM_BOT_USERNAME=
+NOTIFICATION_DEFAULT_CHANNEL=telegram
+LIMOSMS_BOOKING_OTP_ID=
 DOOR_DEVICE_API_KEY=
 ```
 
 Never commit `.env`. `.gitignore` excludes it.
+
+`NOTIFICATION_DEFAULT_CHANNEL` is the default message channel for new users (`telegram` or `sms`); users override it in their account settings or via the bot's `/pref` command.
 
 ### Apply database schema
 
@@ -103,14 +108,14 @@ After granting, sign in again (or refresh) so `/admin` picks up the new role.
 Workers are **not** started by `npm run dev` or the default Docker image.
 
 ```sh
-# Notification delivery (polls notifications table)
-node --import tsx services/notification-worker/index.ts
+# Notification delivery (polls notifications table, Telegram-first / SMS-fallback)
+npm run worker
 
 # Telegram bot (polling)
-node --import tsx apps/telegram-bot/index.ts
+npm run bot
 ```
 
-Requires `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`. Bot also needs `TELEGRAM_BOT_TOKEN`.
+Both scripts load `.env` via `--env-file`. They require `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`. The bot also needs `TELEGRAM_BOT_TOKEN`; the app server needs `TELEGRAM_BOT_USERNAME` for deep-link generation. Delivery to Telegram falls back to SMS automatically when the user isn't linked or Telegram is unreachable.
 
 See [ROADMAP.md](./ROADMAP.md) for maturity of each worker.
 
@@ -236,9 +241,10 @@ After OTP verify, new users fill name + **کد ملی** on `/auth`. National ID 
 
 ### Connect Telegram bot
 
-1. Create bot via BotFather; set `TELEGRAM_BOT_TOKEN`.
-2. Run `apps/telegram-bot/index.ts`.
-3. Note: `/link` flow is scaffold-only — see [ROADMAP.md](./ROADMAP.md) risks.
+1. Create bot via BotFather; set `TELEGRAM_BOT_TOKEN` and `TELEGRAM_BOT_USERNAME` (no `@`).
+2. Run `npm run bot`.
+3. Users connect from account («اتصال تلگرام») or the login OTP screen — the app generates a one-time `t.me/<bot>?start=<token>` deep link (15-min expiry, `telegram_link_tokens` table); tapping **Start** in Telegram links the chat. Bot commands: `/start <token>`, `/pref sms|telegram`, `/my`.
+4. Once linked, OTP codes, booking status, and payment approvals are delivered via Telegram; unlinked users or failed sends fall back to SMS.
 
 ## Troubleshooting
 

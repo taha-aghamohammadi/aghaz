@@ -254,8 +254,8 @@ Routes follow [TanStack Router file conventions](https://tanstack.com/router). S
 
 Phone-based OTP (no password):
 
-1. **Request OTP** — `requestPhoneOtp` validates phone; stores hashed OTP in `phone_otps`; attempts Kavenegar SMS via `sms.server.ts`.
-2. **Demo fallback** — If SMS fails and dev/demo mode is on, `demoCode` is returned to the client (not for production).
+1. **Request OTP** — `requestPhoneOtp` validates phone; stores hashed OTP in `phone_otps`; delivers via `notifyUser` (Telegram-first with SMS fallback, `notify.server.ts`).
+2. **Demo fallback** — If both channels fail and dev/demo mode is on, `demoCode` is returned to the client (not for production).
 3. **Verify OTP** — `consumeOtp` + `issueSessionToken` (create user if needed, upsert profile).
 4. **Signup** — New users complete profile on `/auth` (name + کد ملی). `normalizeNationalId` in `national-id.ts` validates the 10-digit checksum on client and server.
 5. **Client session** — `supabase.auth.verifyOtp` with magic-link token; session in `localStorage`.
@@ -270,7 +270,8 @@ Core tables (`supabase/migrations/`):
 
 | Table | Purpose |
 | --- | --- |
-| `profiles` | User profile; optional `telegram_id` for bot linking |
+| `profiles` | User profile; `telegram_id` for bot linking, `notification_pref` channel choice |
+| `telegram_link_tokens` | One-time deep-link tokens (15-min expiry, service role only) |
 | `phone_otps` | OTP hashes (service role only) |
 | `user_roles` | `admin`, `staff`, `user` |
 | `desks` | Inventory, rates, zones, manual status |
@@ -327,10 +328,10 @@ Not started by the main web server. Run separately:
 
 | Worker | Path | Purpose |
 | --- | --- | --- |
-| Notification worker | `services/notification-worker/index.ts` | Poll `notifications` where `status = pending` |
-| Telegram bot | `apps/telegram-bot/index.ts` | `/start`, `/link`, `/my` (scaffold) |
+| Notification worker | `services/notification-worker/index.ts` | Poll `notifications` where `status = pending`; Telegram-first/SMS-fallback via `notifyUser` |
+| Telegram bot | `apps/telegram-bot/index.ts` | `/start <token>` (deep-link linking), `/pref telegram|sms`, `/my` |
 
-Both need `SUPABASE_URL` and `SUPABASE_SERVICE_ROLE_KEY`. Bot needs `TELEGRAM_BOT_TOKEN`.
+Both need `SUPABASE_URL` and `SUPABASE_SERVICE_ROLE_KEY`; bot needs `TELEGRAM_BOT_TOKEN`. Run via `npm run worker` / `npm run bot` (load `.env` with `--env-file`).
 
 ## Error handling
 
@@ -348,7 +349,7 @@ See [.env.example](../.env.example). Minimum for MVP:
 | `SUPABASE_URL`, `SUPABASE_PUBLISHABLE_KEY` | Server user client |
 | `SUPABASE_SERVICE_ROLE_KEY` | OTP, overlap reads, workers (server only) |
 
-Optional: `SITE_URL`, `KAVENEGAR_*`, `ZARINPAL_*`, `TELEGRAM_BOT_TOKEN`, `DOOR_DEVICE_API_KEY`.
+Optional: `SITE_URL`, `KAVENEGAR_*`, `ZARINPAL_*`, `TELEGRAM_BOT_TOKEN`, `TELEGRAM_BOT_USERNAME`, `NOTIFICATION_DEFAULT_CHANNEL`, `LIMOSMS_BOOKING_OTP_ID`, `DOOR_DEVICE_API_KEY`.
 
 Never expose `SUPABASE_SERVICE_ROLE_KEY` to the browser.
 

@@ -18,6 +18,7 @@ const supabase = createClient<Database>(
 );
 
 type TgUpdate = {
+  update_id: number;
   message?: { text?: string; chat: { id: number }; from?: { id: number } };
 };
 
@@ -144,10 +145,13 @@ async function handleMessage(chatId: number, text: string, fromId: number) {
   await send(chatId, "دستور ناشناخته. /help");
 }
 
+let lastUpdateId = 0;
+
 async function poll() {
-  const res = await tg("getUpdates", { timeout: 30 });
+  const res = await tg("getUpdates", { timeout: 30, offset: lastUpdateId + 1 });
   const updates = (res as { result?: TgUpdate[] }).result ?? [];
   for (const u of updates) {
+    if (u.update_id > lastUpdateId) lastUpdateId = u.update_id;
     const msg = u.message;
     if (!msg?.text || !msg.from) continue;
     await handleMessage(msg.chat.id, msg.text, msg.from.id);

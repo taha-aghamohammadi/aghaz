@@ -42,8 +42,13 @@ See [.env.example](.env.example). Required for full functionality:
 | `SUPABASE_URL` | Server Supabase URL |
 | `SUPABASE_PUBLISHABLE_KEY` | Server user-scoped client |
 | `SUPABASE_SERVICE_ROLE_KEY` | OTP, user provisioning (server only) |
+| `TELEGRAM_BOT_TOKEN` | Telegram bot token (BotFather) — OTP/notification delivery |
+| `TELEGRAM_BOT_USERNAME` | Bot username without `@` — deep-link `t.me/<bot>?start=` |
+| `NOTIFICATION_DEFAULT_CHANNEL` | Default channel for new users: `telegram` or `sms` |
 
 Never commit `.env` or expose the service role key to the browser.
+
+OTP, payment approvals, and booking status messages are delivered via **Telegram first**, falling back to **SMS** when Telegram is unavailable or the user prefers SMS (toggle in account / `/pref`).
 
 ## Scripts
 
@@ -58,6 +63,9 @@ Never commit `.env` or expose the service role key to the browser.
 | `npm run grant-admin` | Grant admin/staff by phone (`--phone`, optional `--role`) |
 | `npm run audit:booking` | Playwright check: landing scroll funnel + pricing section |
 | `npm run audit:navbar` | Playwright check: header/nav at common breakpoints |
+| `npm run check:notify` | Self-check for notification channel/fallback logic |
+| `npm run bot` | Run Telegram bot (polling, needs `--env-file`-loaded `.env`) |
+| `npm run worker` | Run notification worker (polls `notifications` table) |
 
 ## Stack
 

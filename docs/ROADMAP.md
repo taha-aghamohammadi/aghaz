@@ -62,11 +62,11 @@ flowchart TB
 | Account: my bookings + cancel | Done | `account.tsx`, `cancelMyBooking` |
 | Member dashboard | Partial | `dashboard.tsx` — bookings list + receipts; no door button |
 | Admin: bookings / desks / members / finance | Done | `admin/*`, `admin.functions.ts` |
-| Phone OTP auth | Partial | `auth.server.ts`, `sms.server.ts` — demo OTP when SMS unavailable |
+| Phone OTP auth | Done | `auth.server.ts`, `notify.server.ts` — Telegram-first with SMS fallback |
 | Zarinpal payment | Partial | `payment.server.ts`, `/api/payment/callback`, account pay button |
 | Wallet | Partial | `wallet.functions.ts`, DB tables — no top-up UI, non-atomic updates |
-| Notifications | Partial | DB trigger + `notification-worker` scaffold |
-| Telegram bot | Scaffolded | `apps/telegram-bot/index.ts` |
+| Notifications | Partial | DB trigger + `notification-worker` (Telegram-first/SMS-fallback via `notifyUser`) |
+| Telegram bot | Done | `apps/telegram-bot/index.ts` — deep-link linking, `/pref`, `/my` |
 | Smart door (ESP) | Scaffolded | `door.functions.ts`, `door_events` table |
 | Automated tests | Planned | none |
 
@@ -163,7 +163,7 @@ See [MVP_CHECKLIST.md](./MVP_CHECKLIST.md).
 | B2 Payment gateway | Zarinpal request + redirect | Partial | `src/lib/payment.server.ts`; sandbox by default |
 | B3 Webhook / callback | Verify payment → update booking | Partial | `src/routes/api/payment/callback.tsx`, `processPaymentCallback()` |
 | B4 User pay flow | Pay from account | Partial | «پرداخت آنلاین» on unpaid bookings; dialog still «ثبت رزرو» without pay gate |
-| B5 Notifications prep | `notifications` table + trigger | Partial | No email provider; web channel only in worker |
+| B5 Notifications prep | `notifications` table + trigger | Partial | No email provider; web/telegram/SMS delivery in worker |
 
 **Required env:** `SITE_URL`, `ZARINPAL_MERCHANT_ID`, `KAVENEGAR_API_KEY`, `OTP_DEMO_MODE=false` (production)
 
@@ -206,18 +206,18 @@ See [MVP_CHECKLIST.md](./MVP_CHECKLIST.md).
 |------|--------|----------|
 | `notifications` table | Done | Migration |
 | Trigger on booking insert/status change | Done | `enqueue_booking_notification()` |
-| Delivery worker | Scaffolded | `services/notification-worker/index.ts` |
+| Delivery worker | Partial | `services/notification-worker/index.ts` — Telegram-first/SMS-fallback via `notifyUser` |
 | 30 min before `start_at` reminder | Planned | Needs cron or scheduled job |
-| SMS channel delivery | Planned | Extend worker + Kavenegar |
+| SMS channel delivery | Partial | `sendBookingSms` (needs `LIMOSMS_BOOKING_OTP_ID`) |
 | In-app notification UI | Planned | Read `notifications` in dashboard |
 
 **Run worker:**
 
 ```sh
-node --import tsx services/notification-worker/index.ts
+npm run worker
 ```
 
-Requires `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`; optional `TELEGRAM_BOT_TOKEN` for telegram channel.
+Requires `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`; optional `TELEGRAM_BOT_TOKEN` for telegram channel. Fails over to SMS automatically.
 
 ---
 
@@ -225,25 +225,24 @@ Requires `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`; optional `TELEGRAM_BOT_TOK
 
 **Outcome:** Link account, receive alerts, list bookings (later: book/cancel via bot).
 
-**Phase status: Scaffolded**
+**Phase status: Partial**
 
 | Item | Status | Location |
 |------|--------|----------|
-| `profiles.telegram_id` | Done | Migration |
-| Bot: `/start`, `/help`, `/my` | Scaffolded | `apps/telegram-bot/index.ts` |
-| Bot: `/link` account | Scaffolded | Weak — not secure link-token flow |
+| `profiles.telegram_id` + `notification_pref` | Done | Migration |
+| Bot: `/start <token>` deep-link linking | Done | `telegram_link_tokens` table + `handleLinkToken` |
+| Bot: `/pref telegram|sms` channel switch | Done | `apps/telegram-bot/index.ts` |
+| Bot: `/start`, `/help`, `/my` | Done | `apps/telegram-bot/index.ts` |
 | Bot: `/book`, `/cancel` | Planned | Should reuse `booking.service.ts` |
 | GrammY / webhook mode | Planned | Currently raw polling API |
 
 **Run bot:**
 
 ```sh
-node --import tsx apps/telegram-bot/index.ts
+npm run bot
 ```
 
-Requires `TELEGRAM_BOT_TOKEN` + Supabase service role.
-
-**Known gap:** `/link` does not use a dedicated one-time link token table — not production-ready.
+Requires `TELEGRAM_BOT_TOKEN` + Supabase service role; app needs `TELEGRAM_BOT_USERNAME` for deep-link generation.
 
 ---
 
@@ -300,7 +299,7 @@ Read this before production deploy or exposing the app to real members.
 
 ### Scaffold limitations
 
-- **Telegram `/link`:** Not secure; implement proper link-token table before marketing the bot.
+- **Telegram linking:** Deep links expire after 15 min and are one-time. Expired/deleted links must be regenerated from «حساب من» or the login connect card.
 - **Wallet payments:** `payBookingFromWallet` uses sequential Supabase calls, not a single Postgres transaction — rare race under concurrent requests.
 - **Notification worker:** No retry backoff or dead-letter queue for failed Telegram sends.
 
@@ -358,7 +357,6 @@ Not committed to the roadmap — candidates for post-Phase F.
 - **`packages/core`** — shared booking rules for web, workers, bot
 - **E2E tests** (Playwright): signup → book → pay → admin confirm
 - **Atomic wallet/payment** — Postgres functions or `supabase.rpc` transactions
-- **Secure Telegram link tokens** — dedicated table with expiry
 - **Use `is_desk_available` RPC** everywhere for consistency
 - **Migrate auth email domain** to `@phone.aghaz.space` (or similar)
 
