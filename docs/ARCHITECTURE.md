@@ -208,7 +208,9 @@ src/
 │       ├── dashboard.tsx      # Member booking dashboard
 │       └── admin/             # Staff panel
 ├── components/site/
-│   ├── LiveDeskMap.tsx        # Live desk map from Supabase
+│   ├── LiveDeskMap.tsx        # Live desk map from Supabase (4-mode availability toggle)
+│   ├── desk-display-meta.ts   # Status/label color maps + availability mode config
+│   ├── week-availability-grid.tsx  # Shared 7-day desk planner
 │   ├── BookingDialog.tsx      # Desk-aware booking flow
 │   ├── SiteHeader.tsx, SiteFooter.tsx, receipt-document.ts
 ├── lib/
@@ -302,9 +304,9 @@ Shared business logic lives in **`booking.service.ts`** (pricing, time windows, 
 
 End-to-end flow:
 
-1. **Live map** — `listPublicDesks` loads active desks + overlapping bookings + `pricing_settings`; `LiveDeskMap` (`#desks`) shows free / held / busy.
+1. **Live map** — `listPublicDesks` loads active desks + overlapping bookings + `pricing_settings`; `LiveDeskMap` (`#desks`) shows free / held / busy. A 4-mode toggle (لحظهای/اول میز/اول زمان/هفته) switches the view: current-time status, status for a chosen window (compact date+hour picker), or a 7-day `WeekAvailabilityGrid`.
 2. **Landing CTAs** — On `/`, header/hero/pricing «رزرو» actions call `scrollToLiveMap()`; pricing tiers call `prepareTier()` first. Dialog does not open until a desk is chosen on the map (except header on non-landing routes).
-3. **Select desk** — User opens `BookingDialog` via «رزرو این میز» with desk rates from DB (per-desk overrides or global `pricing_settings`).
+3. **Select desk** — User opens `BookingDialog` via «رزرو این میز» with desk rates from DB (per-desk overrides or global `pricing_settings`); `date?` preselected when chosen via the week planner.
 4. **Auth gate** — Logged-out users redirect to `/auth` with pending booking restored from `sessionStorage`.
 5. **Create** — `createUserBooking` inserts `status: pending`, `payment_status: unpaid`, code `AGZ-*`.
 6. **Confirm** — Staff toggles confirmed/paid in admin, **or** user pays via Zarinpal / wallet on account page.

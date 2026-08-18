@@ -164,14 +164,21 @@ On `/`, most «رزرو» CTAs **scroll to the live map** (`#desks`) instead of 
 | Header «رزرو میز» | `scrollToLiveMap()` |
 | Hero / bottom CTA | `scrollToLiveMap()` |
 | Pricing tier buttons | `prepareTier(type)` then scroll to map |
-| Live map «رزرو این میز» | `useBooking().open({ desk, type? })` → dialog |
+| Live map «رزرو این میز» | `useBooking().open({ desk, type?, date? })` → dialog |
 
 On other routes (e.g. `/brand`), header «رزرو میز» still opens `BookingDialog` directly.
+
+The live map card carries a **4-mode availability toggle** (لحظهای / اول میز / اول زمان / هفته), persisted to localStorage under `aghaz_availability_mode` (`desk-display-meta.ts`):
+
+- **لحظهای / اول میز** — desk status at current time.
+- **اول زمان** — a compact date + hour picker above the map; statuses reflect the chosen window.
+- **هفته** — replaces the grid with the 7-day `WeekAvailabilityGrid`; clicking a free cell opens the dialog with that date preselected (`date?`).
 
 Helpers:
 
 - `src/lib/scroll-to-live-map.ts` — smooth scroll with sticky-header offset (`scroll-mt-24` on `#desks`)
 - `BookingDialog` provider — `prepareTier()` sets preferred hourly/daily/monthly before desk selection
+- `src/components/site/week-availability-grid.tsx` — shared week planner (homepage + booking dialog)
 
 Section anchors on landing: `#gallery`, `#desks`, `#pricing` (no separate `#spaces` section).
 

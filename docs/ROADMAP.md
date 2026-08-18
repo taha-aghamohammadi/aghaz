@@ -55,7 +55,7 @@ flowchart TB
 | Area | Status | Key files / routes |
 |------|--------|-------------------|
 | Landing + marketing | Done | `src/routes/index.tsx`, `site-assets.ts` |
-| Live desk map | Done | `LiveDeskMap.tsx`, `listPublicDesks` |
+| Live desk map (4 availability modes) | Done | `LiveDeskMap.tsx`, `desk-display-meta.ts`, `week-availability-grid.tsx`, `listPublicDesks` |
 | Global pricing (`pricing_settings`) | Done | `getPublicPricing`, `/admin/pricing`, landing `#pricing` |
 | User booking (pending/unpaid) | Done | `createUserBooking`, `BookingDialog.tsx` |
 | Account: profile | Done | `account.tsx`, `updateMyProfile` |
@@ -105,8 +105,10 @@ For architecture detail see [ARCHITECTURE.md](./ARCHITECTURE.md). For local setu
 | Pass selected desk into booking | Done | `useBooking().open({ desk, type? })` |
 | Scroll-to-map funnel on landing | Done | `scrollToLiveMap()`, `prepareTier()`, header/hero/pricing CTAs |
 | Preferred tier banner on map | Done | `LiveDeskMap.tsx` when `prepareTier()` was used |
+| Availability mode toggle (لحظهای/اول میز/اول زمان/هفته) | Done | `LiveDeskMap.tsx`, `desk-display-meta.ts` |
+| 7-day week planner | Done | `week-availability-grid.tsx` |
 
-**Acceptance:** Admin desk/rate changes and new bookings affect map after re-fetch. Landing CTAs scroll to `#desks`; dialog opens only after desk selection on the map (or from non-landing header).
+**Acceptance:** Admin desk/rate changes and new bookings affect map after re-fetch. Landing CTAs scroll to `#desks`; dialog opens only after desk selection on the map (or from non-landing header). A 4-mode toggle on the map card switches availability between live, window, and 7-day views.
 
 ### Milestone A3 — Wire booking dialog to database
 

@@ -11,7 +11,7 @@ Part of **Phase A** in the product roadmap — see [ROADMAP.md](./ROADMAP.md).
 
 1. **Landing** — Open `/`. Sections: hero → features → gallery (`#gallery`) → live map (`#desks`) → pricing (`#pricing`). Map loads desks from Supabase (not a static mock). Pricing tiers match `pricing_settings` via `getPublicPricing`.
 2. **Scroll funnel** — «رزرو میز» in header/hero/pricing scrolls to `#desks` (does not open the dialog). Pricing tier buttons set preferred type (`hourly` / `daily` / `monthly`) then scroll to the map.
-3. **Pick desk** — On the map, click a free desk → «رزرو این میز» opens `BookingDialog` with that desk and the preferred tier when set.
+3. **Pick desk** — On the map, pick a mode (لحظهای / اول میز / اول زمان / هفته), then click a free desk → «رزرو این میز» opens `BookingDialog` with that desk and the preferred tier when set.
 4. **Auth** — Confirm booking while logged out → redirect to `/auth`, demo OTP shown if SMS not configured. New users complete signup with a valid کد ملی (10 digits + checksum; dev test: `0123456789`).
 5. **Book** — After login, complete booking → receipt shows `pending` / `unpaid`, code prefix `AGZ-`.
 6. **Account** — `/account` lists booking under «رزروهای من».
