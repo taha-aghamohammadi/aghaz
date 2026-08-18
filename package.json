@@ -14,6 +14,8 @@
     "audit:navbar": "node scripts/navbar-audit.mjs",
     "grant-admin": "node scripts/grant-admin.mjs",
     "check:notify": "node --import tsx scripts/check-notify.ts",
+    "bot": "node --env-file=.env --import tsx apps/telegram-bot/index.ts",
+    "worker": "node --env-file=.env --import tsx services/notification-worker/index.ts",
     "lint": "eslint .",
     "format": "prettier --write ."
   },
