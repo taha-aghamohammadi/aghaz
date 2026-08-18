@@ -1,6 +1,6 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useServerFn } from "@tanstack/react-start";
-import { Check, MapPin } from "lucide-react";
+import { CalendarIcon, Check, Clock, Loader2, MapPin } from "lucide-react";
 import {
   Dialog,
   DialogContent,
@@ -9,12 +9,29 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { PersianCalendar } from "@/components/ui/persian-calendar";
 import { useBooking, type BookingType } from "@/components/site/BookingDialog";
 import { listPublicDesks, type PublicDesk } from "@/lib/booking.functions";
-import { DEFAULT_PRICING, unitPriceForType, type PricingTiers } from "@/lib/booking.service";
-import { toman, toFa } from "@/lib/fa-format";
+import {
+  BUSINESS_HOUR_END,
+  BUSINESS_HOUR_START,
+  DEFAULT_PRICING,
+  iranDateTime,
+  tryBuildWindow,
+  unitPriceForType,
+  type PricingTiers,
+} from "@/lib/booking.service";
+import { toman, toFa, faJalaliDate } from "@/lib/fa-format";
 
-import { DESK_DISPLAY_META } from "@/components/site/desk-display-meta";
+import {
+  AVAILABILITY_MODES,
+  DESK_DISPLAY_META,
+  DESK_LABELS,
+} from "@/components/site/desk-display-meta";
+import { WeekAvailabilityGrid } from "@/components/site/week-availability-grid";
+import { cn } from "@/lib/utils";
+import { format } from "date-fns";
 
 function Legend({ color, label }: { color: string; label: string }) {
   return (
@@ -30,40 +47,118 @@ const TIER_LABELS: Record<BookingType, string> = {
   monthly: "ماهانه",
 };
 
+const HOURS = Array.from(
+  { length: BUSINESS_HOUR_END - BUSINESS_HOUR_START },
+  (_, i) => BUSINESS_HOUR_START + i,
+);
+
+type WeekDay = { date: Date; dateStr: string; desks: PublicDesk[] };
+
 export function LiveDeskMap() {
-  const { open, preferredType } = useBooking();
+  const { open, preferredType, availabilityMode, changeMode } = useBooking();
   const fetchDesks = useServerFn(listPublicDesks);
   const [desks, setDesks] = useState<PublicDesk[]>([]);
   const [pricing, setPricing] = useState<PricingTiers>(DEFAULT_PRICING);
   const [loading, setLoading] = useState(true);
   const [selected, setSelected] = useState<PublicDesk | null>(null);
 
-  useEffect(() => {
-    let active = true;
-    const load = () =>
-      void fetchDesks({ data: {} })
+  const [windowDate, setWindowDate] = useState<Date | undefined>(() => {
+    const d = new Date();
+    d.setDate(d.getDate() + 1);
+    return d;
+  });
+  const [windowStartHour, setWindowStartHour] = useState(10);
+  const [windowDuration, setWindowDuration] = useState(2);
+  const [weekData, setWeekData] = useState<WeekDay[]>([]);
+  const [weekLoading, setWeekLoading] = useState(false);
+
+  const bookingWindow = useMemo(() => {
+    if (!windowDate) return null;
+    return tryBuildWindow({
+      bookingType: "hourly",
+      dateStr: format(windowDate, "yyyy-MM-dd"),
+      startHour: windowStartHour,
+      duration: windowDuration,
+    });
+  }, [windowDate, windowStartHour, windowDuration]);
+
+  const loadWindow = useCallback(
+    (params: { windowStart?: string; windowEnd?: string }) =>
+      fetchDesks({ data: params })
         .then((res) => {
-          if (active) {
-            setDesks(res.desks);
-            setPricing(res.pricing);
-          }
+          setDesks(res.desks);
+          setPricing(res.pricing);
         })
-        .catch(() => {
-          if (active) setDesks([]);
-        })
-        .finally(() => {
-          if (active) setLoading(false);
-        });
+        .catch(() => setDesks([]))
+        .finally(() => setLoading(false)),
+    [fetchDesks],
+  );
+
+  useEffect(() => {
+    if (availabilityMode === "week") return;
+    let active = true;
+    setLoading(true);
+    const win = bookingWindow;
+    if (availabilityMode === "timeFirst" && win) {
+      const t = setTimeout(
+        () =>
+          void loadWindow({ windowStart: win.startAt, windowEnd: win.endAt }).then(() => {
+            if (!active) return;
+          }),
+        300,
+      );
+      return () => {
+        active = false;
+        clearTimeout(t);
+      };
+    }
+    const load = () => void loadWindow({});
     load();
     const timer = setInterval(load, 60_000);
     return () => {
       active = false;
       clearInterval(timer);
     };
-  }, [fetchDesks]);
+  }, [availabilityMode, bookingWindow, loadWindow]);
+
+  useEffect(() => {
+    if (availabilityMode !== "week") return;
+    let active = true;
+    setWeekLoading(true);
+    const days: { date: Date; dateStr: string }[] = Array.from({ length: 7 }, (_, i) => {
+      const d = new Date();
+      d.setDate(d.getDate() + i);
+      return { date: d, dateStr: format(d, "yyyy-MM-dd") };
+    });
+    Promise.all(
+      days.map((d) =>
+        fetchDesks({
+          data: {
+            windowStart: iranDateTime(d.dateStr, BUSINESS_HOUR_START),
+            windowEnd: iranDateTime(d.dateStr, BUSINESS_HOUR_END),
+          },
+        }).then((res) => ({ ...d, desks: res.desks })),
+      ),
+    )
+      .then((data) => {
+        if (active) setWeekData(data);
+      })
+      .catch(() => {
+        if (active) setWeekData([]);
+      })
+      .finally(() => {
+        if (active) setWeekLoading(false);
+      });
+    return () => {
+      active = false;
+    };
+  }, [availabilityMode, fetchDesks]);
 
   const free = desks.filter((d) => d.displayStatus === "free").length;
   const meta = selected ? DESK_DISPLAY_META[selected.displayStatus] : null;
+  const labelsMode =
+    availabilityMode === "timeFirst" ? "window" : availabilityMode === "week" ? "week" : "now";
+  const labels = DESK_LABELS[labelsMode];
 
   return (
     <section
@@ -84,17 +179,22 @@ export function LiveDeskMap() {
               نقشه‌ی میزهای اشتراکی آغاز از داده‌ی واقعی سامانه به‌روز می‌شود. روی هر میز بزن و رزرو
               کن.
             </p>
-            <div className="mt-6 flex items-baseline gap-2">
-              <span className="text-5xl font-semibold tracking-tight">{toFa(free)}</span>
-              <span className="text-[13px] text-muted-foreground">
-                میز آزاد از {toFa(desks.length)} میز
-              </span>
-            </div>
-            <div className="mt-6 flex flex-wrap gap-4 text-[12px] text-muted-foreground">
-              <Legend color="bg-success" label="آزاد" />
-              <Legend color="bg-warning" label="رزرو شده" />
-              <Legend color="bg-destructive" label="پر" />
-            </div>
+            {availabilityMode !== "week" && (
+              <>
+                <div className="mt-6 flex items-baseline gap-2">
+                  <span className="text-5xl font-semibold tracking-tight">{toFa(free)}</span>
+                  <span className="text-[13px] text-muted-foreground">
+                    میز {availabilityMode === "timeFirst" ? "آزاد در بازه‌ی انتخابی" : "آزاد"} از{" "}
+                    {toFa(desks.length)} میز
+                  </span>
+                </div>
+                <div className="mt-6 flex flex-wrap gap-4 text-[12px] text-muted-foreground">
+                  <Legend color="bg-success" label={labels.free} />
+                  <Legend color="bg-warning" label={labels.held} />
+                  <Legend color="bg-destructive" label={labels.busy} />
+                </div>
+              </>
+            )}
             {preferredType && (
               <p className="mt-6 rounded-2xl border border-primary/30 bg-primary/10 px-4 py-3 text-[13px] text-foreground">
                 پلن {TIER_LABELS[preferredType]} انتخاب شد — یک میز آزاد را انتخاب کنید.
@@ -112,8 +212,118 @@ export function LiveDeskMap() {
               </div>
             </div>
 
+            <div className="border-b border-hairline px-4 py-3">
+              <div className="grid grid-cols-4 gap-1 rounded-full border border-hairline bg-surface/60 p-1">
+                {AVAILABILITY_MODES.map((m) => {
+                  const active = m.id === availabilityMode;
+                  return (
+                    <button
+                      key={m.id}
+                      type="button"
+                      onClick={() => changeMode(m.id)}
+                      className={cn(
+                        "rounded-full px-1 py-1.5 text-[12px] transition",
+                        active
+                          ? "bg-primary text-primary-foreground shadow-sm"
+                          : "text-muted-foreground hover:bg-surface",
+                      )}
+                    >
+                      {m.label}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+
+            {availabilityMode === "timeFirst" && (
+              <div className="flex flex-wrap items-end gap-3 border-b border-hairline bg-surface/30 px-4 py-3">
+                <div>
+                  <div className="text-[10px] font-medium tracking-widest text-muted-foreground">
+                    تاریخ
+                  </div>
+                  <Popover>
+                    <PopoverTrigger asChild>
+                      <Button
+                        variant="outline"
+                        className="mt-1 h-9 justify-start rounded-xl border-hairline text-right font-normal text-[12px]"
+                      >
+                        <CalendarIcon className="ml-2 h-3.5 w-3.5" />
+                        {windowDate ? faJalaliDate(windowDate) : "انتخاب تاریخ"}
+                      </Button>
+                    </PopoverTrigger>
+                    <PopoverContent className="w-auto p-0" align="start">
+                      <PersianCalendar
+                        mode="single"
+                        selected={windowDate}
+                        onSelect={setWindowDate}
+                        disabled={(d) => {
+                          const today = new Date();
+                          today.setHours(0, 0, 0, 0);
+                          return d < today;
+                        }}
+                        initialFocus
+                        className="p-3 pointer-events-auto"
+                      />
+                    </PopoverContent>
+                  </Popover>
+                </div>
+                <div>
+                  <div className="text-[10px] font-medium tracking-widest text-muted-foreground">
+                    ساعت شروع
+                  </div>
+                  <select
+                    value={windowStartHour}
+                    onChange={(e) => setWindowStartHour(Number(e.target.value))}
+                    className="mt-1 h-9 rounded-xl border border-hairline bg-card px-2 text-[12px]"
+                  >
+                    {HOURS.map((h) => (
+                      <option key={h} value={h}>
+                        {toFa(h)}:۰۰
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <div className="text-[10px] font-medium tracking-widest text-muted-foreground">
+                    مدت
+                  </div>
+                  <select
+                    value={windowDuration}
+                    onChange={(e) => setWindowDuration(Number(e.target.value))}
+                    className="mt-1 h-9 rounded-xl border border-hairline bg-card px-2 text-[12px]"
+                  >
+                    {Array.from(
+                      { length: Math.min(6, BUSINESS_HOUR_END - windowStartHour) },
+                      (_, i) => i + 1,
+                    ).map((h) => (
+                      <option key={h} value={h}>
+                        {toFa(h)} ساعت
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                {bookingWindow && (
+                  <div className="mb-0.5 inline-flex items-center gap-1.5 rounded-full border border-hairline bg-surface/60 px-2.5 py-1 text-[11px] text-muted-foreground">
+                    <Clock className="h-3 w-3" />
+                    <span dir="ltr">
+                      {toFa(windowStartHour)}:۰۰ – {toFa(windowStartHour + windowDuration)}:۰۰
+                    </span>
+                  </div>
+                )}
+              </div>
+            )}
+
             <div className="bg-[radial-gradient(circle_at_1px_1px,color-mix(in_oklab,var(--foreground)_10%,transparent)_1px,transparent_0)] [background-size:22px_22px] p-4 sm:p-6">
-              {loading ? (
+              {availabilityMode === "week" ? (
+                <WeekAvailabilityGrid
+                  weekData={weekData}
+                  weekLoading={weekLoading}
+                  onSelect={(desk, date) => {
+                    setSelected(null);
+                    open({ type: preferredType ?? "hourly", desk, date });
+                  }}
+                />
+              ) : loading ? (
                 <p className="py-8 text-center text-[13px] text-muted-foreground">بارگذاری نقشه…</p>
               ) : (
                 <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
@@ -137,7 +347,7 @@ export function LiveDeskMap() {
                           {d.zone}
                         </div>
                         <div className="mt-3 text-[11px] text-foreground/70">
-                          {isFree ? "مشاهده و رزرو" : deskMeta.label}
+                          {isFree ? "مشاهده و رزرو" : labels[d.displayStatus]}
                         </div>
                       </button>
                     );

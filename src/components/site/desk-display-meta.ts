@@ -31,3 +31,14 @@ export const DESK_LABELS: Record<
   window: { free: "آزاد در این بازه", held: "رزرو در این بازه", busy: "پر" },
   week: { free: "آزاد", held: "رزرو", busy: "پر" },
 };
+
+export type AvailabilityMode = "now" | "deskFirst" | "timeFirst" | "week";
+
+export const AVAILABILITY_MODES: { id: AvailabilityMode; label: string; hint: string }[] = [
+  { id: "now", label: "لحظه‌ای", hint: "وضعیت همین حالا" },
+  { id: "deskFirst", label: "اول میز", hint: "میز بعد از زمان" },
+  { id: "timeFirst", label: "اول زمان", hint: "زمان بعد از میز" },
+  { id: "week", label: "هفته", hint: "نمای ۷ روزه" },
+];
+
+export const AVAILABILITY_MODE_KEY = "aghaz_availability_mode";
