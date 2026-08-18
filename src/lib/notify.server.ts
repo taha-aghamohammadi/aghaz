@@ -41,7 +41,13 @@ export async function sendTelegramMessage(chatId: number, text: string): Promise
 }
 
 /** Attempt order for a user. Pure so it can be checked without a DB. */
-export function deliveryOrder(pref: string | null, telegramId: number | null): DeliveryChannel[] {
+export function deliveryOrder(
+  pref: string | null,
+  telegramId: number | null,
+  force?: DeliveryChannel,
+): DeliveryChannel[] {
+  if (force === "sms") return ["sms"];
+  if (force === "telegram") return telegramId ? ["telegram", "sms"] : ["sms"];
   const wantTelegram = (pref ?? defaultChannel()) === "telegram";
   if (wantTelegram && telegramId) return ["telegram", "sms"];
   return ["sms"];
@@ -56,6 +62,7 @@ export async function notifyUser(input: {
   otpCode?: string;
   approval?: { username: string; hour: string; day: string };
   booking?: { code: string; status: string; type: string };
+  force?: DeliveryChannel;
 }): Promise<{ channel: DeliveryChannel; sent: boolean }> {
   const { supabase } = input;
 
@@ -77,7 +84,7 @@ export async function notifyUser(input: {
   const targetPhone = profile?.phone ?? input.phone ?? null;
   const pref = profile?.notification_pref ?? defaultChannel();
 
-  for (const channel of deliveryOrder(pref, profile?.telegram_id ?? null)) {
+  for (const channel of deliveryOrder(pref, profile?.telegram_id ?? null, input.force)) {
     if (channel === "telegram") {
       const ok = await sendTelegramMessage(profile!.telegram_id!, input.text);
       if (ok) return { channel: "telegram", sent: true };

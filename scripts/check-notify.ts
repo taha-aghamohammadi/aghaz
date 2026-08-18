@@ -12,6 +12,19 @@ assert.deepEqual(deliveryOrder("sms", 123), ["sms"], "sms pref skips telegram");
 assert.deepEqual(deliveryOrder("sms", null), ["sms"], "sms pref, unlinked");
 assert.deepEqual(deliveryOrder(null, 123), ["telegram", "sms"], "null pref defaults to telegram");
 
+assert.deepEqual(deliveryOrder("telegram", 123, "sms"), ["sms"], "force sms skips telegram");
+assert.deepEqual(deliveryOrder("telegram", null, "sms"), ["sms"], "force sms, unlinked");
+assert.deepEqual(
+  deliveryOrder("sms", 123, "telegram"),
+  ["telegram", "sms"],
+  "force telegram, linked",
+);
+assert.deepEqual(
+  deliveryOrder("sms", null, "telegram"),
+  ["sms"],
+  "force telegram, unlinked falls back",
+);
+
 process.env.NOTIFICATION_DEFAULT_CHANNEL = "sms";
 assert.deepEqual(deliveryOrder(null, 123), ["sms"], "env sms default overrides");
 assert.deepEqual(

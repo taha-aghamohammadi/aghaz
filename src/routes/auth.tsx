@@ -18,6 +18,7 @@ import { Label } from "@/components/ui/label";
 import { Toaster } from "@/components/ui/sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { requestPhoneOtp, updateMyProfile, verifyPhoneOtp } from "@/lib/auth.functions";
+import { createTelegramLink } from "@/lib/telegram.functions";
 import { OtpDemoBadge } from "@/components/site/OtpDemoBadge";
 import { isOtpDemoMode } from "@/lib/demo-mode";
 import { normalizeNationalId } from "@/lib/national-id";
@@ -57,14 +58,7 @@ const perks = [
   "ورود بدون رمز عبور با کد یکبار مصرف",
 ];
 
-const EDUCATION_OPTIONS = [
-  "دیپلم",
-  "کاردانی",
-  "کارشناسی",
-  "کارشناسی ارشد",
-  "دکتری",
-  "سایر",
-];
+const EDUCATION_OPTIONS = ["دیپلم", "کاردانی", "کارشناسی", "کارشناسی ارشد", "دکتری", "سایر"];
 
 function AuthPage() {
   const navigate = useNavigate();
@@ -80,6 +74,9 @@ function AuthPage() {
   const [loading, setLoading] = useState(false);
   const [seconds, setSeconds] = useState(0);
   const [demoCode, setDemoCode] = useState<string | null>(null);
+  const [telegramLinked, setTelegramLinked] = useState(false);
+  const [otpChannel, setOtpChannel] = useState<"telegram" | "sms" | "none">("none");
+  const [connectCard, setConnectCard] = useState(false);
   const codeRef = useRef<HTMLInputElement>(null);
 
   const afterAuthPath = redirect || "/";
@@ -101,16 +98,21 @@ function AuthPage() {
     setCode("");
     setDemoCode(null);
     setSeconds(0);
+    setTelegramLinked(false);
+    setOtpChannel("none");
+    setConnectCard(false);
   }
 
-  async function sendCode() {
+  async function sendCode(forceChannel?: "sms" | "telegram") {
     setLoading(true);
     try {
-      const res = await requestPhoneOtp({ data: { phone } });
+      const res = await requestPhoneOtp({ data: { phone, channel: forceChannel } });
       setStep("otp");
       setSeconds(60);
       setCode("");
       setDemoCode(res.demoCode ?? null);
+      setTelegramLinked(res.telegramLinked);
+      setOtpChannel(res.channel);
       if (res.demoCode) {
         toast.message("کد دمو", {
           description: `کد ورود شما: ${res.demoCode}`,
@@ -148,7 +150,14 @@ function AuthPage() {
     }
     setLoading(true);
     try {
-      const { registered, emailOtp, email } = await verifyPhoneOtp({ data: { phone, code } });
+      const {
+        registered,
+        telegramLinked: linked,
+        emailOtp,
+        email,
+      } = await verifyPhoneOtp({
+        data: { phone, code },
+      });
       const { error } = await supabase.auth.verifyOtp({
         email,
         token: emailOtp,
@@ -157,14 +166,20 @@ function AuthPage() {
       if (error) throw new Error("ورود ناموفق بود. دوباره تلاش کنید.");
       await router.invalidate();
 
+      setTelegramLinked(linked);
       if (registered) {
-        toast.success("خوش آمدید 👋");
-        navigate({ to: afterAuthPath, replace: true });
+        if (linked) {
+          toast.success("خوش آمدید 👋");
+          navigate({ to: afterAuthPath, replace: true });
+        } else {
+          setConnectCard(true);
+        }
       } else {
         toast.message("حسابی با این شماره وجود ندارد", {
           description: "برای ادامه، ثبت‌نام را تکمیل کنید.",
         });
         setStep("signup");
+        setConnectCard(true);
       }
     } catch (e) {
       if (e instanceof TypeError && /fetch/i.test(e.message)) {
@@ -208,6 +223,29 @@ function AuthPage() {
     } finally {
       setLoading(false);
     }
+  }
+
+  async function connectTelegram() {
+    try {
+      const res = await createTelegramLink();
+      window.open(res.url, "_blank", "noopener");
+      toast.success("لینک اتصال باز شد.", {
+        description: "در تلگرام روی Start بزنید تا حساب متصل شود.",
+        duration: 8000,
+      });
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "اتصال تلگرام ناموفق بود.");
+    }
+  }
+
+  function continueAfterConnect() {
+    setConnectCard(false);
+    toast.success("خوش آمدید 👋");
+    navigate({ to: afterAuthPath, replace: true });
+  }
+
+  function dismissConnectCard() {
+    setConnectCard(false);
   }
 
   return (
@@ -279,7 +317,9 @@ function AuthPage() {
                   }}
                 >
                   <div className="space-y-2">
-                    <Label htmlFor="phone" className="text-[13px]">شماره موبایل</Label>
+                    <Label htmlFor="phone" className="text-[13px]">
+                      شماره موبایل
+                    </Label>
                     <div className="relative">
                       <Phone className="absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
                       <Input
@@ -314,18 +354,26 @@ function AuthPage() {
                   <div className="mb-4 grid h-11 w-11 place-items-center rounded-2xl bg-primary/10 text-primary">
                     <KeyRound className="h-5 w-5" />
                   </div>
-                  <h1 className="text-[26px] font-semibold tracking-tight">کد تأیید را وارد کنید</h1>
+                  <h1 className="text-[26px] font-semibold tracking-tight">
+                    کد تأیید را وارد کنید
+                  </h1>
                   {isOtpDemoMode() && (
                     <div className="mt-3">
                       <OtpDemoBadge />
                     </div>
                   )}
                   <p className="mt-2 text-[13.5px] leading-6 text-muted-foreground">
-                    کد ۴ رقمی برای شماره{" "}
-                    <span dir="ltr" className="font-medium text-foreground">
-                      {toFa(phone)}
-                    </span>{" "}
-                    ارسال شد.
+                    {telegramLinked && otpChannel === "telegram" ? (
+                      <>کد ۴ رقمی به تلگرام شما ارسال شد.</>
+                    ) : (
+                      <>
+                        کد ۴ رقمی برای شماره{" "}
+                        <span dir="ltr" className="font-medium text-foreground">
+                          {toFa(phone)}
+                        </span>{" "}
+                        ارسال شد.
+                      </>
+                    )}
                   </p>
                 </div>
 
@@ -393,6 +441,49 @@ function AuthPage() {
                     {seconds > 0 ? `ارسال مجدد در ${toFa(seconds)} ثانیه` : "ارسال مجدد کد"}
                   </button>
                 </div>
+
+                {telegramLinked && otpChannel === "telegram" && (
+                  <div className="mt-4 rounded-xl border border-hairline bg-surface px-4 py-3">
+                    <p className="text-[12.5px] leading-6 text-muted-foreground">
+                      کد را در تلگرام دریافت نکردید؟
+                    </p>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      disabled={seconds > 0 || loading}
+                      onClick={() => void sendCode("sms")}
+                      className="mt-2 h-9 w-full rounded-full text-[13px]"
+                    >
+                      دریافت کد با پیامک
+                    </Button>
+                  </div>
+                )}
+
+                {connectCard && (
+                  <div className="mt-4 rounded-2xl border border-primary/30 bg-primary/5 px-4 py-4">
+                    <p className="text-[13.5px] font-medium text-foreground">به تلگرام متصل شوید</p>
+                    <p className="mt-1.5 text-[12.5px] leading-6 text-muted-foreground">
+                      برای دریافت کدها و اعلان‌ها در تلگرام، حساب خود را همین حالا متصل کنید. یکبار
+                      اتصال کافی است — از این پس کد ورود در تلگرام ارسال می‌شود.
+                    </p>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      disabled={loading}
+                      onClick={() => void connectTelegram()}
+                      className="mt-3 h-9 w-full rounded-full text-[13px]"
+                    >
+                      اتصال تلگرام
+                    </Button>
+                    <button
+                      type="button"
+                      onClick={continueAfterConnect}
+                      className="mt-2 w-full text-center text-[12.5px] text-muted-foreground transition hover:text-foreground"
+                    >
+                      بعداً
+                    </button>
+                  </div>
+                )}
               </>
             ) : (
               <>
@@ -403,6 +494,32 @@ function AuthPage() {
                   </p>
                 </div>
 
+                {connectCard && (
+                  <div className="mb-5 rounded-2xl border border-primary/30 bg-primary/5 px-4 py-4">
+                    <p className="text-[13.5px] font-medium text-foreground">به تلگرام متصل شوید</p>
+                    <p className="mt-1.5 text-[12.5px] leading-6 text-muted-foreground">
+                      برای دریافت کدها و اعلان‌ها در تلگرام، حساب خود را همین حالا متصل کنید. یکبار
+                      اتصال کافی است — از این پس کد ورود در تلگرام ارسال می‌شود.
+                    </p>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      disabled={loading}
+                      onClick={() => void connectTelegram()}
+                      className="mt-3 h-9 w-full rounded-full text-[13px]"
+                    >
+                      اتصال تلگرام
+                    </Button>
+                    <button
+                      type="button"
+                      onClick={dismissConnectCard}
+                      className="mt-2 w-full text-center text-[12.5px] text-muted-foreground transition hover:text-foreground"
+                    >
+                      بعداً
+                    </button>
+                  </div>
+                )}
+
                 <form
                   className="space-y-4"
                   onSubmit={(e) => {
@@ -411,7 +528,9 @@ function AuthPage() {
                   }}
                 >
                   <div className="space-y-2">
-                    <Label htmlFor="signupPhone" className="text-[13px]">شماره موبایل</Label>
+                    <Label htmlFor="signupPhone" className="text-[13px]">
+                      شماره موبایل
+                    </Label>
                     <div className="relative">
                       <Phone className="absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
                       <Input
@@ -425,7 +544,9 @@ function AuthPage() {
                   </div>
 
                   <div className="space-y-2">
-                    <Label htmlFor="fullName" className="text-[13px]">نام و نام خانوادگی</Label>
+                    <Label htmlFor="fullName" className="text-[13px]">
+                      نام و نام خانوادگی
+                    </Label>
                     <div className="relative">
                       <User className="absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
                       <Input
@@ -440,7 +561,9 @@ function AuthPage() {
                   </div>
 
                   <div className="space-y-2">
-                    <Label htmlFor="nationalId" className="text-[13px]">کد ملی</Label>
+                    <Label htmlFor="nationalId" className="text-[13px]">
+                      کد ملی
+                    </Label>
                     <div className="relative">
                       <IdCard className="absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
                       <Input
@@ -457,7 +580,9 @@ function AuthPage() {
                   </div>
 
                   <div className="space-y-2">
-                    <Label htmlFor="jobTitle" className="text-[13px]">شغل</Label>
+                    <Label htmlFor="jobTitle" className="text-[13px]">
+                      شغل
+                    </Label>
                     <div className="relative">
                       <Briefcase className="absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
                       <Input
@@ -472,7 +597,9 @@ function AuthPage() {
                   </div>
 
                   <div className="space-y-2">
-                    <Label htmlFor="education" className="text-[13px]">تحصیلات</Label>
+                    <Label htmlFor="education" className="text-[13px]">
+                      تحصیلات
+                    </Label>
                     <select
                       id="education"
                       value={education}
@@ -481,7 +608,9 @@ function AuthPage() {
                     >
                       <option value="">انتخاب کنید</option>
                       {EDUCATION_OPTIONS.map((o) => (
-                        <option key={o} value={o}>{o}</option>
+                        <option key={o} value={o}>
+                          {o}
+                        </option>
                       ))}
                     </select>
                   </div>

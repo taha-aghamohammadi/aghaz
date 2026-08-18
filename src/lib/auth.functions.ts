@@ -4,6 +4,7 @@ import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 
 const requestSchema = z.object({
   phone: z.string().trim().min(8).max(20),
+  channel: z.enum(["sms", "telegram"]).optional(),
 });
 
 const verifySchema = z.object({
@@ -28,7 +29,7 @@ export const requestPhoneOtp = createServerFn({ method: "POST" })
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
     const { data: existing } = await supabaseAdmin
       .from("profiles")
-      .select("id, full_name, national_id")
+      .select("id, full_name, national_id, telegram_id")
       .eq("phone", phone)
       .maybeSingle();
 
@@ -40,6 +41,7 @@ export const requestPhoneOtp = createServerFn({ method: "POST" })
     });
 
     const { notifyUser } = await import("@/lib/notify.server");
+    let channel: "telegram" | "sms" | "none" = "none";
     let smsSent = false;
     try {
       const result = await notifyUser({
@@ -48,8 +50,10 @@ export const requestPhoneOtp = createServerFn({ method: "POST" })
         kind: "otp",
         text: `کد ورود شما به آغاز: ${code}`,
         otpCode: code,
+        force: data.channel,
       });
       smsSent = result.sent;
+      channel = result.channel;
     } catch (e) {
       console.error("[OTP] send failed:", e);
     }
@@ -63,6 +67,8 @@ export const requestPhoneOtp = createServerFn({ method: "POST" })
       isNewUser: !existing,
       maskedEmail: phoneToEmail(phone),
       smsSent,
+      telegramLinked: !!existing?.telegram_id,
+      channel,
       demoMode: showDemoCode,
       demoCode: showDemoCode ? code : undefined,
     };
@@ -79,7 +85,7 @@ export const verifyPhoneOtp = createServerFn({ method: "POST" })
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
     const { data: existingProfile } = await supabaseAdmin
       .from("profiles")
-      .select("full_name, national_id")
+      .select("full_name, national_id, telegram_id")
       .eq("phone", phone)
       .maybeSingle();
 
@@ -89,6 +95,7 @@ export const verifyPhoneOtp = createServerFn({ method: "POST" })
 
     return {
       registered,
+      telegramLinked: !!existingProfile?.telegram_id,
       emailOtp: session.emailOtp,
       email: session.email,
     };
