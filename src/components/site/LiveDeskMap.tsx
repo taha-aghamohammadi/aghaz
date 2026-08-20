@@ -60,6 +60,7 @@ export function LiveDeskMap() {
   const [desks, setDesks] = useState<PublicDesk[]>([]);
   const [pricing, setPricing] = useState<PricingTiers>(DEFAULT_PRICING);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(false);
   const [selected, setSelected] = useState<PublicDesk | null>(null);
 
   const [windowDate, setWindowDate] = useState<Date | undefined>(() => {
@@ -88,11 +89,23 @@ export function LiveDeskMap() {
         .then((res) => {
           setDesks(res.desks);
           setPricing(res.pricing);
+          setError(false);
         })
-        .catch(() => setDesks([]))
+        .catch(() => setError(true))
         .finally(() => setLoading(false)),
     [fetchDesks],
   );
+
+  const reload = useCallback(() => {
+    if (availabilityMode === "week") return;
+    setLoading(true);
+    const win = bookingWindow;
+    if (availabilityMode === "timeFirst" && win) {
+      void loadWindow({ windowStart: win.startAt, windowEnd: win.endAt });
+    } else {
+      void loadWindow({});
+    }
+  }, [availabilityMode, bookingWindow, loadWindow]);
 
   useEffect(() => {
     if (availabilityMode === "week") return;
@@ -182,13 +195,16 @@ export function LiveDeskMap() {
             {availabilityMode !== "week" && (
               <>
                 <div className="mt-6 flex items-baseline gap-2">
-                  <span className="text-5xl font-semibold tracking-tight">{toFa(free)}</span>
+                  <span className="text-5xl font-semibold tracking-tight">
+                    {error ? "–" : toFa(free)}
+                  </span>
                   <span className="text-[13px] text-muted-foreground">
-                    میز {availabilityMode === "timeFirst" ? "آزاد در بازه‌ی انتخابی" : "آزاد"} از{" "}
-                    {toFa(desks.length)} میز
+                    {error
+                      ? "وضعیت در دسترس نیست"
+                      : `میز ${availabilityMode === "timeFirst" ? "آزاد در بازه‌ی انتخابی" : "آزاد"} از ${toFa(desks.length)} میز`}
                   </span>
                 </div>
-                <div className="mt-6 flex flex-wrap gap-4 text-[12px] text-muted-foreground">
+                <div className="mt-6 flex flex-wrap gap-4 text-[12.5px] text-muted-foreground">
                   <Legend color="bg-success" label={labels.free} />
                   <Legend color="bg-warning" label={labels.held} />
                   <Legend color="bg-destructive" label={labels.busy} />
@@ -213,7 +229,7 @@ export function LiveDeskMap() {
             </div>
 
             <div className="border-b border-hairline px-4 py-3">
-              <div className="grid grid-cols-4 gap-1 rounded-full border border-hairline bg-surface/60 p-1">
+              <div className="grid grid-cols-4 gap-1.5 rounded-full border border-hairline bg-surface/60 p-1.5">
                 {AVAILABILITY_MODES.map((m) => {
                   const active = m.id === availabilityMode;
                   return (
@@ -222,7 +238,7 @@ export function LiveDeskMap() {
                       type="button"
                       onClick={() => changeMode(m.id)}
                       className={cn(
-                        "rounded-full px-1 py-1.5 text-[12px] transition",
+                        "rounded-full px-1 py-2.5 text-[12.5px] transition",
                         active
                           ? "bg-primary text-primary-foreground shadow-sm"
                           : "text-muted-foreground hover:bg-surface",
@@ -245,7 +261,7 @@ export function LiveDeskMap() {
                     <PopoverTrigger asChild>
                       <Button
                         variant="outline"
-                        className="mt-1 h-9 justify-start rounded-xl border-hairline text-right font-normal text-[12px]"
+                        className="mt-1 h-11 justify-start rounded-xl border-hairline text-right font-normal text-[12.5px]"
                       >
                         <CalendarIcon className="ml-2 h-3.5 w-3.5" />
                         {windowDate ? faJalaliDate(windowDate) : "انتخاب تاریخ"}
@@ -274,7 +290,7 @@ export function LiveDeskMap() {
                   <select
                     value={windowStartHour}
                     onChange={(e) => setWindowStartHour(Number(e.target.value))}
-                    className="mt-1 h-9 rounded-xl border border-hairline bg-card px-2 text-[12px]"
+                    className="mt-1 h-11 rounded-xl border border-hairline bg-card px-2 text-[12.5px]"
                   >
                     {HOURS.map((h) => (
                       <option key={h} value={h}>
@@ -290,7 +306,7 @@ export function LiveDeskMap() {
                   <select
                     value={windowDuration}
                     onChange={(e) => setWindowDuration(Number(e.target.value))}
-                    className="mt-1 h-9 rounded-xl border border-hairline bg-card px-2 text-[12px]"
+                    className="mt-1 h-11 rounded-xl border border-hairline bg-card px-2 text-[12.5px]"
                   >
                     {Array.from(
                       { length: Math.min(6, BUSINESS_HOUR_END - windowStartHour) },
@@ -323,6 +339,18 @@ export function LiveDeskMap() {
                     open({ type: preferredType ?? "hourly", desk, date });
                   }}
                 />
+              ) : error ? (
+                <div className="flex flex-col items-center gap-3 py-8 text-center">
+                  <p className="text-[13px] text-muted-foreground">خطا در دریافت وضعیت میزها</p>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={reload}
+                    className="h-10 rounded-full px-4"
+                  >
+                    دوباره تلاش کن
+                  </Button>
+                </div>
               ) : loading ? (
                 <p className="py-8 text-center text-[13px] text-muted-foreground">بارگذاری نقشه…</p>
               ) : (
@@ -330,6 +358,7 @@ export function LiveDeskMap() {
                   {desks.map((d) => {
                     const deskMeta = DESK_DISPLAY_META[d.displayStatus];
                     const isFree = d.displayStatus === "free";
+                    const isSelected = selected?.id === d.id;
                     return (
                       <button
                         key={d.id}
@@ -337,7 +366,7 @@ export function LiveDeskMap() {
                         onClick={() => setSelected(d)}
                         className={`group cursor-pointer rounded-2xl border p-3 text-right transition ${deskMeta.cell} ${
                           isFree ? "" : "opacity-80"
-                        }`}
+                        } ${isSelected ? "ring-2 ring-primary ring-offset-1 ring-offset-card" : ""}`}
                       >
                         <div className="flex items-center justify-between gap-2">
                           <span className="text-[13.5px] font-semibold">{d.name}</span>

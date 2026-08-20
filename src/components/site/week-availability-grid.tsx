@@ -43,10 +43,10 @@ export function WeekAvailabilityGrid({
             <div />
             {weekData.map((d) => (
               <div key={d.dateStr} className="text-center">
-                <div className="text-[11px] font-medium">
+                <div className="text-[12px] font-medium">
                   {new Intl.DateTimeFormat("fa-IR", { weekday: "short" }).format(d.date)}
                 </div>
-                <div className="text-[10px] text-muted-foreground">
+                <div className="text-[11px] text-muted-foreground">
                   {faJalaliDate(d.date).split(" ").slice(0, -1).join(" ")}
                 </div>
               </div>

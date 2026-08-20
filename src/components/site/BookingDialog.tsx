@@ -587,7 +587,7 @@ export function BookingProvider({ children }: { children: React.ReactNode }) {
           <Button
             variant="outline"
             className={cn(
-              "mt-2 w-full justify-start rounded-xl border-hairline text-right font-normal",
+              "mt-2 h-11 w-full justify-start rounded-xl border-hairline text-right font-normal",
               !date && "text-muted-foreground",
             )}
           >
@@ -627,7 +627,7 @@ export function BookingProvider({ children }: { children: React.ReactNode }) {
                   disabled={isPast}
                   onClick={() => setStartHour(h)}
                   className={cn(
-                    "rounded-lg border px-2 py-1.5 text-[12px] transition",
+                    "rounded-lg border px-2 py-2.5 text-[12px] transition",
                     active
                       ? "border-primary/60 bg-primary text-primary-foreground"
                       : isPast
@@ -864,7 +864,7 @@ export function BookingProvider({ children }: { children: React.ReactNode }) {
               <Button
                 variant="ghost"
                 size="sm"
-                className="h-7 self-start rounded-full px-2 text-[12px] text-muted-foreground"
+                className="h-9 self-start rounded-full px-3 text-[12px] text-muted-foreground"
                 onClick={() => setSelectedDesk(null)}
               >
                 تغییر میز
@@ -1154,7 +1154,7 @@ export function BookingProvider({ children }: { children: React.ReactNode }) {
                 <Button
                   onClick={handleConfirm}
                   disabled={confirming || deskConflict}
-                  className="rounded-full"
+                  className="h-11 rounded-full px-6"
                 >
                   {confirming ? (
                     <Loader2 className="ml-1.5 h-4 w-4 animate-spin" />
@@ -1163,7 +1163,11 @@ export function BookingProvider({ children }: { children: React.ReactNode }) {
                   )}
                   ثبت رزرو
                 </Button>
-                <Button variant="ghost" onClick={() => setOpen(false)} className="rounded-full">
+                <Button
+                  variant="ghost"
+                  onClick={() => setOpen(false)}
+                  className="h-11 rounded-full px-5"
+                >
                   انصراف
                 </Button>
               </DialogFooter>
@@ -1200,7 +1204,7 @@ function Stepper({
           type="button"
           onClick={() => onChange(Math.max(min, value - 1))}
           disabled={value <= min}
-          className="grid h-9 w-9 place-items-center rounded-full border border-hairline bg-card text-muted-foreground transition hover:bg-surface disabled:opacity-40"
+          className="grid h-11 w-11 place-items-center rounded-full border border-hairline bg-card text-muted-foreground transition hover:bg-surface disabled:opacity-40"
         >
           <Minus className="h-3.5 w-3.5" />
         </button>
@@ -1211,7 +1215,7 @@ function Stepper({
           type="button"
           onClick={() => onChange(Math.min(max, value + 1))}
           disabled={value >= max}
-          className="grid h-9 w-9 place-items-center rounded-full border border-hairline bg-card text-muted-foreground transition hover:bg-surface disabled:opacity-40"
+          className="grid h-11 w-11 place-items-center rounded-full border border-hairline bg-card text-muted-foreground transition hover:bg-surface disabled:opacity-40"
         >
           <Plus className="h-3.5 w-3.5" />
         </button>
