@@ -21,13 +21,10 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { PersianCalendar } from "@/components/ui/persian-calendar";
 import {
-  AVAILABILITY_MODE_KEY,
   DESK_DISPLAY_META,
   DESK_LABELS,
-  type AvailabilityMode,
   type DeskAvailabilityMode,
 } from "@/components/site/desk-display-meta";
-import { WeekAvailabilityGrid } from "@/components/site/week-availability-grid";
 import {
   Dialog,
   DialogContent,
@@ -75,8 +72,6 @@ type Ctx = {
   open: (options?: BookingOpenOptions) => void;
   preferredType: BookingType | null;
   prepareTier: (type: BookingType) => void;
-  availabilityMode: AvailabilityMode;
-  changeMode: (mode: AvailabilityMode) => void;
 };
 const BookingCtx = createContext<Ctx | null>(null);
 
@@ -200,28 +195,8 @@ export function BookingProvider({ children }: { children: React.ReactNode }) {
   const [submittingReceipt, setSubmittingReceipt] = useState(false);
   const [createdBookingId, setCreatedBookingId] = useState<string | null>(null);
 
-  const [availabilityMode, setAvailabilityMode] = useState<AvailabilityMode>(() => {
-    if (typeof window === "undefined") return "timeFirst";
-    const saved = window.localStorage.getItem(AVAILABILITY_MODE_KEY);
-    return saved === "now" || saved === "deskFirst" || saved === "week" || saved === "timeFirst"
-      ? saved
-      : "timeFirst";
-  });
-  const changeMode = useCallback((m: AvailabilityMode) => {
-    setAvailabilityMode(m);
-    try {
-      window.localStorage.setItem(AVAILABILITY_MODE_KEY, m);
-    } catch {
-      /* ignore */
-    }
-  }, []);
-
   const [zoneFilter, setZoneFilter] = useState("");
   const [featureFilter, setFeatureFilter] = useState("");
-  const [weekData, setWeekData] = useState<{ date: Date; dateStr: string; desks: PublicDesk[] }[]>(
-    [],
-  );
-  const [weekLoading, setWeekLoading] = useState(false);
 
   useEffect(() => {
     let active = true;
@@ -337,10 +312,7 @@ export function BookingProvider({ children }: { children: React.ReactNode }) {
         });
     setDesksLoading(true);
     const win = bookingWindow;
-    const needsWindow =
-      win !== null &&
-      availabilityMode !== "now" &&
-      (availabilityMode === "timeFirst" || selectedDesk !== null);
+    const needsWindow = win !== null;
     if (needsWindow) {
       const t = setTimeout(
         () => void load({ windowStart: win.startAt, windowEnd: win.endAt }),
@@ -355,44 +327,11 @@ export function BookingProvider({ children }: { children: React.ReactNode }) {
     return () => {
       active = false;
     };
-  }, [open, selectedDesk, receipt, fetchDesks, availabilityMode, bookingWindow]);
-
-  useEffect(() => {
-    if (!open || receipt || availabilityMode !== "week") return;
-    let active = true;
-    setWeekLoading(true);
-    const days: { date: Date; dateStr: string }[] = Array.from({ length: 7 }, (_, i) => {
-      const d = new Date();
-      d.setDate(d.getDate() + i);
-      return { date: d, dateStr: format(d, "yyyy-MM-dd") };
-    });
-    Promise.all(
-      days.map((d) =>
-        fetchDesks({
-          data: {
-            windowStart: iranDateTime(d.dateStr, BUSINESS_HOUR_START),
-            windowEnd: iranDateTime(d.dateStr, BUSINESS_HOUR_END),
-          },
-        }).then((res) => ({ ...d, desks: res.desks })),
-      ),
-    )
-      .then((data) => {
-        if (active) setWeekData(data);
-      })
-      .catch(() => {
-        if (active) setWeekData([]);
-      })
-      .finally(() => {
-        if (active) setWeekLoading(false);
-      });
-    return () => {
-      active = false;
-    };
-  }, [open, receipt, availabilityMode, fetchDesks]);
+  }, [open, selectedDesk, receipt, fetchDesks, bookingWindow]);
 
   const ctx = useMemo(
-    () => ({ open: openFn, preferredType, prepareTier, availabilityMode, changeMode }),
-    [openFn, preferredType, prepareTier, availabilityMode, changeMode],
+    () => ({ open: openFn, preferredType, prepareTier }),
+    [openFn, preferredType, prepareTier],
   );
 
   const current = typeMeta(pricing, type);
@@ -424,12 +363,11 @@ export function BookingProvider({ children }: { children: React.ReactNode }) {
     [availableDesks, zoneFilter, featureFilter],
   );
 
-  const labelsMode: DeskAvailabilityMode = availabilityMode === "timeFirst" ? "window" : "now";
+  const labelsMode: DeskAvailabilityMode = "window";
 
   const types: BookingType[] = ["hourly", "daily", "monthly"];
 
   const deskConflict =
-    availabilityMode === "deskFirst" &&
     selectedDesk !== null &&
     !desksLoading &&
     availableDesks.some((d) => d.id === selectedDesk.id && d.displayStatus !== "free");
@@ -717,21 +655,19 @@ export function BookingProvider({ children }: { children: React.ReactNode }) {
     setConfirming(true);
     try {
       const dateStr = format(date, "yyyy-MM-dd");
-      if (availabilityMode === "now") {
-        const check = await fetchAvailability({
-          data: {
-            deskId: selectedDesk.id,
-            bookingType: type,
-            dateStr,
-            startHour: type === "hourly" ? startHour : undefined,
-            duration: type !== "monthly" ? duration : undefined,
-            months: type === "monthly" ? months : undefined,
-          },
-        });
-        if (!check.available) {
-          toast.error("این میز در بازه‌ی انتخابی رزرو شده است.");
-          return;
-        }
+      const check = await fetchAvailability({
+        data: {
+          deskId: selectedDesk.id,
+          bookingType: type,
+          dateStr,
+          startHour: type === "hourly" ? startHour : undefined,
+          duration: type !== "monthly" ? duration : undefined,
+          months: type === "monthly" ? months : undefined,
+        },
+      });
+      if (!check.available) {
+        toast.error("این میز در بازه‌ی انتخابی رزرو شده است.");
+        return;
       }
       const row = await submitBooking({
         data: {
@@ -854,11 +790,7 @@ export function BookingProvider({ children }: { children: React.ReactNode }) {
                   : "برای نهایی‌کردن رزرو، رسید واریز را ارسال کنید."
                 : selectedDesk
                   ? `میز ${selectedDesk.code} · ${selectedDesk.zone}`
-                  : availabilityMode === "timeFirst"
-                    ? "اول نوع رزرو و بازه رو انتخاب کن، بعد میزت رو ببین."
-                    : availabilityMode === "week"
-                      ? "هفته‌ی پیش رو رو ببین و میز و روز آزادت رو انتخاب کن."
-                      : "یک میز آزاد انتخاب کنید."}
+                  : "اول نوع رزرو و بازه رو انتخاب کن، بعد میزت رو ببین."}
             </DialogDescription>
             {selectedDesk && !receipt && (
               <Button
@@ -1095,20 +1027,9 @@ export function BookingProvider({ children }: { children: React.ReactNode }) {
                 </Button>
               </DialogFooter>
             </>
-          ) : availabilityMode === "week" && !selectedDesk ? (
-            <div className="max-h-[70vh] overflow-y-auto px-6 py-5">
-              <WeekAvailabilityGrid
-                weekData={weekData}
-                weekLoading={weekLoading}
-                onSelect={(desk, date) => {
-                  setDate(date);
-                  setSelectedDesk(desk);
-                }}
-              />
-            </div>
           ) : !selectedDesk ? (
             <div className="max-h-[70vh] overflow-y-auto px-6 py-5">
-              {availabilityMode === "timeFirst" && <div className="space-y-6">{timeControls}</div>}
+              <div className="space-y-6">{timeControls}</div>
               {deskGrid}
             </div>
           ) : (
