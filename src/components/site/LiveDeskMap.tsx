@@ -19,6 +19,7 @@ import { toman, toFa, faJalaliDate } from "@/lib/fa-format";
 
 import { DESK_DISPLAY_META, PLAN_DESK_LABELS } from "@/components/site/desk-display-meta";
 import { FloorPlanView } from "@/components/site/floor-plan-view";
+import { DeskTimelineView } from "@/components/site/desk-timeline-view";
 import { cn } from "@/lib/utils";
 import { format } from "date-fns";
 
@@ -51,7 +52,7 @@ export function LiveDeskMap() {
   const [selected, setSelected] = useState<PublicDesk | null>(null);
 
   const [planType, setPlanType] = useState<BookingType>(preferredType ?? "hourly");
-  const [view, setView] = useState<"grid" | "plan">("grid");
+  const [view, setView] = useState<"grid" | "plan" | "timeline">("grid");
 
   const [showCustomTime, setShowCustomTime] = useState(false);
   const [customDate, setCustomDate] = useState<Date | undefined>(() => {
@@ -132,8 +133,17 @@ export function LiveDeskMap() {
     };
   }, [hourlyWindow, planWindow, loadWindow]);
 
-  const free = desks.filter((d) => d.displayStatus === "free").length;
+  const free = desks.filter((d) => d.displayStatus !== "busy").length;
   const labels = PLAN_DESK_LABELS[planType];
+  const nowIso = new Date().toISOString();
+
+  const nextReservationAt = (d: PublicDesk): string | null => {
+    const future = d.reservedIntervals
+      .filter((iv) => iv.startAt > nowIso)
+      .map((iv) => iv.startAt)
+      .sort();
+    return future.length ? future[0] : null;
+  };
 
   return (
     <section
@@ -210,6 +220,7 @@ export function LiveDeskMap() {
                   [
                     { id: "grid", label: "شبکه‌ای" },
                     { id: "plan", label: "پلان سالن" },
+                    { id: "timeline", label: "زمان‌بندی" },
                   ] as const
                 ).map((v) => {
                   const active = v.id === view;
@@ -353,12 +364,15 @@ export function LiveDeskMap() {
                   selectedId={selected?.id}
                   onSelect={setSelected}
                 />
+              ) : view === "timeline" ? (
+                <DeskTimelineView desks={desks} selectedId={selected?.id} onSelect={setSelected} />
               ) : (
                 <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
                   {desks.map((d) => {
                     const deskMeta = DESK_DISPLAY_META[d.displayStatus];
                     const isFree = d.displayStatus === "free";
                     const isSelected = selected?.id === d.id;
+                    const nextAt = isFree ? nextReservationAt(d) : null;
                     return (
                       <button
                         key={d.id}
@@ -375,8 +389,13 @@ export function LiveDeskMap() {
                         <div className="mt-1 truncate text-[11px] text-muted-foreground">
                           {d.zone}
                         </div>
-                        <div className="mt-3 text-[11px] text-foreground/70">
-                          {labels[d.displayStatus]}
+                        <div className="mt-3 flex flex-wrap items-center gap-1.5 text-[11px] text-foreground/70">
+                          <span>{labels[d.displayStatus]}</span>
+                          {nextAt && (
+                            <span className="rounded-full border border-warning/40 bg-warning/10 px-2 py-0.5 text-[10.5px] font-medium text-foreground/80">
+                              رزرو از {toFa(new Date(nextAt).getHours())}:۰۰
+                            </span>
+                          )}
                         </div>
                       </button>
                     );

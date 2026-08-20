@@ -35,6 +35,13 @@ function DeskBlock({
 }) {
   const meta = DESK_DISPLAY_META[desk.displayStatus];
   const isFree = desk.displayStatus === "free";
+  const nowIso = new Date().toISOString();
+  const nextAt = isFree
+    ? (desk.reservedIntervals
+        .filter((iv) => iv.startAt > nowIso)
+        .map((iv) => iv.startAt)
+        .sort()[0] ?? null)
+    : null;
   return (
     <button
       type="button"
@@ -60,6 +67,11 @@ function DeskBlock({
           labels[desk.displayStatus]
         )}
       </span>
+      {nextAt && (
+        <span className="mt-0.5 rounded-full border border-warning/40 bg-warning/10 px-1.5 py-0.5 text-[9px] font-medium text-foreground/80">
+          رزرو از {toFa(new Date(nextAt).getHours())}:۰۰
+        </span>
+      )}
     </button>
   );
 }

@@ -31,6 +31,11 @@ export function isCardTransferExpired(createdAt: string, now = new Date()): bool
 type DeskRow = Database["public"]["Tables"]["desks"]["Row"];
 type BookingRow = Database["public"]["Tables"]["bookings"]["Row"];
 
+export type ReservedInterval = {
+  startAt: string;
+  endAt: string;
+};
+
 export type PublicDesk = {
   id: string;
   code: string;
@@ -41,6 +46,8 @@ export type PublicDesk = {
   adminStatus: string;
   displayStatus: DeskDisplayStatus;
   isActive: boolean;
+  /** Bookings overlapping the requested window (non-cancelled). */
+  reservedIntervals: ReservedInterval[];
 };
 
 export function generateBookingCode(): string {
@@ -262,6 +269,13 @@ export function mapPublicDesk(
     adminStatus: desk.status,
     displayStatus: computeDeskDisplayStatus(desk, bookings, windowStart, windowEnd),
     isActive: desk.is_active,
+    reservedIntervals: bookings
+      .filter(
+        (b) =>
+          b.desk_id === desk.id &&
+          bookingDisplayStatus(b, windowStart, windowEnd, b.start_at, b.end_at) !== null,
+      )
+      .map((b) => ({ startAt: b.start_at, endAt: b.end_at })),
   };
 }
 
