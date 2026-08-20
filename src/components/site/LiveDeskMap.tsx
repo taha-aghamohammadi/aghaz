@@ -1,13 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useServerFn } from "@tanstack/react-start";
-import { CalendarIcon, Check, Clock, Loader2, MapPin } from "lucide-react";
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
+import { CalendarIcon, Clock, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { PersianCalendar } from "@/components/ui/persian-calendar";
@@ -28,8 +21,10 @@ import {
   AVAILABILITY_MODES,
   DESK_DISPLAY_META,
   DESK_LABELS,
+  PLAN_DESK_LABELS,
 } from "@/components/site/desk-display-meta";
 import { WeekAvailabilityGrid } from "@/components/site/week-availability-grid";
+import { FloorPlanView } from "@/components/site/floor-plan-view";
 import { cn } from "@/lib/utils";
 import { format } from "date-fns";
 
@@ -73,6 +68,13 @@ export function LiveDeskMap() {
   const [weekData, setWeekData] = useState<WeekDay[]>([]);
   const [weekLoading, setWeekLoading] = useState(false);
 
+  const [planType, setPlanType] = useState<BookingType>(preferredType ?? "hourly");
+  const [view, setView] = useState<"grid" | "plan">("grid");
+
+  useEffect(() => {
+    if (preferredType) setPlanType(preferredType);
+  }, [preferredType]);
+
   const bookingWindow = useMemo(() => {
     if (!windowDate) return null;
     return tryBuildWindow({
@@ -82,6 +84,23 @@ export function LiveDeskMap() {
       duration: windowDuration,
     });
   }, [windowDate, windowStartHour, windowDuration]);
+
+  const planWindow = useMemo(() => {
+    const today = format(new Date(), "yyyy-MM-dd");
+    if (planType === "daily") {
+      return {
+        windowStart: iranDateTime(today, BUSINESS_HOUR_START),
+        windowEnd: iranDateTime(today, BUSINESS_HOUR_END),
+      };
+    }
+    if (planType === "monthly") {
+      return {
+        windowStart: iranDateTime(today, BUSINESS_HOUR_START),
+        windowEnd: new Date(new Date().setMonth(new Date().getMonth() + 1)).toISOString(),
+      };
+    }
+    return null;
+  }, [planType]);
 
   const loadWindow = useCallback(
     (params: { windowStart?: string; windowEnd?: string }) =>
@@ -102,10 +121,12 @@ export function LiveDeskMap() {
     const win = bookingWindow;
     if (availabilityMode === "timeFirst" && win) {
       void loadWindow({ windowStart: win.startAt, windowEnd: win.endAt });
+    } else if (planWindow) {
+      void loadWindow(planWindow);
     } else {
       void loadWindow({});
     }
-  }, [availabilityMode, bookingWindow, loadWindow]);
+  }, [availabilityMode, bookingWindow, planWindow, loadWindow]);
 
   useEffect(() => {
     if (availabilityMode === "week") return;
@@ -125,14 +146,15 @@ export function LiveDeskMap() {
         clearTimeout(t);
       };
     }
-    const load = () => void loadWindow({});
+    const params = planWindow ?? {};
+    const load = () => void loadWindow(params);
     load();
     const timer = setInterval(load, 60_000);
     return () => {
       active = false;
       clearInterval(timer);
     };
-  }, [availabilityMode, bookingWindow, loadWindow]);
+  }, [availabilityMode, bookingWindow, planWindow, loadWindow]);
 
   useEffect(() => {
     if (availabilityMode !== "week") return;
@@ -168,10 +190,12 @@ export function LiveDeskMap() {
   }, [availabilityMode, fetchDesks]);
 
   const free = desks.filter((d) => d.displayStatus === "free").length;
-  const meta = selected ? DESK_DISPLAY_META[selected.displayStatus] : null;
   const labelsMode =
     availabilityMode === "timeFirst" ? "window" : availabilityMode === "week" ? "week" : "now";
-  const labels = DESK_LABELS[labelsMode];
+  const labels =
+    availabilityMode === "timeFirst" || availabilityMode === "week"
+      ? DESK_LABELS[labelsMode]
+      : PLAN_DESK_LABELS[planType];
 
   return (
     <section
@@ -201,7 +225,9 @@ export function LiveDeskMap() {
                   <span className="text-[13px] text-muted-foreground">
                     {error
                       ? "وضعیت در دسترس نیست"
-                      : `میز ${availabilityMode === "timeFirst" ? "آزاد در بازه‌ی انتخابی" : "آزاد"} از ${toFa(desks.length)} میز`}
+                      : `میز ${
+                          availabilityMode === "timeFirst" ? "آزاد در بازه‌ی انتخابی" : labels.free
+                        } از ${toFa(desks.length)} میز`}
                   </span>
                 </div>
                 <div className="mt-6 flex flex-wrap gap-4 text-[12.5px] text-muted-foreground">
@@ -329,6 +355,56 @@ export function LiveDeskMap() {
               </div>
             )}
 
+            {(availabilityMode === "now" || availabilityMode === "deskFirst") && (
+              <div className="flex flex-wrap items-center justify-between gap-3 border-b border-hairline bg-surface/30 px-4 py-3">
+                <div className="flex rounded-full border border-hairline bg-background p-1">
+                  {(Object.keys(TIER_LABELS) as BookingType[]).map((t) => {
+                    const active = t === planType;
+                    return (
+                      <button
+                        key={t}
+                        type="button"
+                        onClick={() => setPlanType(t)}
+                        className={cn(
+                          "rounded-full px-3 py-2 text-[12.5px] transition",
+                          active
+                            ? "bg-primary text-primary-foreground shadow-sm"
+                            : "text-muted-foreground hover:bg-surface",
+                        )}
+                      >
+                        {TIER_LABELS[t]}
+                      </button>
+                    );
+                  })}
+                </div>
+                <div className="flex rounded-full border border-hairline bg-background p-1">
+                  {(
+                    [
+                      { id: "grid", label: "شبکه‌ای" },
+                      { id: "plan", label: "پلان سالن" },
+                    ] as const
+                  ).map((v) => {
+                    const active = v.id === view;
+                    return (
+                      <button
+                        key={v.id}
+                        type="button"
+                        onClick={() => setView(v.id)}
+                        className={cn(
+                          "rounded-full px-3 py-2 text-[12.5px] transition",
+                          active
+                            ? "bg-foreground/10 text-foreground"
+                            : "text-muted-foreground hover:bg-surface",
+                        )}
+                      >
+                        {v.label}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+
             <div className="bg-[radial-gradient(circle_at_1px_1px,color-mix(in_oklab,var(--foreground)_10%,transparent)_1px,transparent_0)] [background-size:22px_22px] p-4 sm:p-6">
               {availabilityMode === "week" ? (
                 <WeekAvailabilityGrid
@@ -353,6 +429,13 @@ export function LiveDeskMap() {
                 </div>
               ) : loading ? (
                 <p className="py-8 text-center text-[13px] text-muted-foreground">بارگذاری نقشه…</p>
+              ) : view === "plan" ? (
+                <FloorPlanView
+                  desks={desks}
+                  labels={labels}
+                  selectedId={selected?.id}
+                  onSelect={setSelected}
+                />
               ) : (
                 <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
                   {desks.map((d) => {
@@ -376,7 +459,7 @@ export function LiveDeskMap() {
                           {d.zone}
                         </div>
                         <div className="mt-3 text-[11px] text-foreground/70">
-                          {isFree ? "مشاهده و رزرو" : labels[d.displayStatus]}
+                          {labels[d.displayStatus]}
                         </div>
                       </button>
                     );
@@ -384,76 +467,41 @@ export function LiveDeskMap() {
                 </div>
               )}
             </div>
-          </div>
-        </div>
-      </div>
 
-      <Dialog open={!!selected} onOpenChange={(o) => !o && setSelected(null)}>
-        <DialogContent className="max-w-md rounded-3xl">
-          {selected && meta && (
-            <>
-              <DialogHeader className="text-right">
-                <div className="flex items-center gap-2">
-                  <span className={`h-2 w-2 rounded-full ${meta.dot}`} />
-                  <span className="text-[11px] text-muted-foreground">{meta.label}</span>
-                </div>
-                <DialogTitle className="text-2xl font-semibold tracking-tight">
-                  {selected.name} · {selected.zone}
-                </DialogTitle>
-                <DialogDescription className="text-[13px] leading-relaxed">
-                  {selected.locationNote || "میز اشتراکی آغاز"}
-                </DialogDescription>
-              </DialogHeader>
-
-              <div className="space-y-4">
-                <div className="rounded-2xl border border-hairline bg-surface/50 p-4">
-                  <div className="flex items-center gap-2 text-[12px] font-medium text-muted-foreground">
-                    <MapPin className="h-3.5 w-3.5" />
-                    کد میز
-                  </div>
-                  <div className="mt-1.5 text-[14px]" dir="ltr">
+            {selected && availabilityMode !== "week" && (
+              <div className="sticky bottom-0 z-10 flex items-center justify-between gap-4 border-t border-hairline bg-card px-5 py-3">
+                <div className="flex min-w-0 items-center gap-3">
+                  <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-hairline bg-surface text-[12px] font-semibold">
                     {selected.code}
-                  </div>
-                </div>
-
-                {selected.features.length > 0 && (
-                  <div className="rounded-2xl border border-hairline p-4">
-                    <div className="text-[12px] font-medium text-muted-foreground">ویژگی‌ها</div>
-                    <ul className="mt-3 grid gap-2 sm:grid-cols-2">
-                      {selected.features.map((f) => (
-                        <li key={f} className="flex items-center gap-2 text-[13px]">
-                          <Check className="h-3.5 w-3.5 shrink-0 text-success" />
-                          {f}
-                        </li>
-                      ))}
-                    </ul>
-                  </div>
-                )}
-
-                <div className="flex items-center justify-between gap-3 rounded-2xl border border-hairline bg-surface/50 px-4 py-3">
-                  <span className="text-[12px] text-muted-foreground">تعرفه ساعتی</span>
-                  <span className="text-[14px] font-semibold">
-                    {toman(unitPriceForType(pricing, "hourly"))}
                   </span>
+                  <div className="min-w-0">
+                    <div className="truncate text-[13.5px] font-semibold">
+                      {selected.name} · {selected.zone}
+                    </div>
+                    <div className="mt-0.5 flex items-center gap-1.5 text-[11.5px] text-muted-foreground">
+                      <span
+                        className={`h-1.5 w-1.5 rounded-full ${DESK_DISPLAY_META[selected.displayStatus].dot}`}
+                      />
+                      {labels[selected.displayStatus]} ·{" "}
+                      {toman(unitPriceForType(pricing, planType))}
+                    </div>
+                  </div>
                 </div>
-
                 <Button
-                  className="w-full rounded-full"
+                  className="shrink-0 rounded-full px-6"
                   disabled={selected.displayStatus !== "free"}
                   onClick={() => {
                     setSelected(null);
-                    open({ type: preferredType ?? "hourly", desk: selected });
+                    open({ type: planType, desk: selected });
                   }}
                 >
-                  {selected.displayStatus === "free"
-                    ? "رزرو این میز"
-                    : "این میز فعلاً در دسترس نیست"}
+                  {selected.displayStatus === "free" ? "رزرو این میز" : "در دسترس نیست"}
                 </Button>
               </div>
-            </>
-          )}
-        </DialogContent>
-      </Dialog>
+            )}
+          </div>
+        </div>
+      </div>
     </section>
   );
 }

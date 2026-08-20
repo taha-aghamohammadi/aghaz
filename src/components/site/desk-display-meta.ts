@@ -1,4 +1,5 @@
 import type { PublicDesk } from "@/lib/booking.functions";
+import type { BookingType } from "@/lib/booking.service";
 
 export const DESK_DISPLAY_META: Record<
   PublicDesk["displayStatus"],
@@ -30,6 +31,12 @@ export const DESK_LABELS: Record<
   now: { free: "آزاد", held: "رزرو شده", busy: "پر" },
   window: { free: "آزاد در این بازه", held: "رزرو در این بازه", busy: "پر" },
   week: { free: "آزاد", held: "رزرو", busy: "پر" },
+};
+
+export const PLAN_DESK_LABELS: Record<BookingType, Record<PublicDesk["displayStatus"], string>> = {
+  hourly: { free: "آزاد", held: "رزرو شده", busy: "پر" },
+  daily: { free: "آزاد کل روز", held: "رزرو شده", busy: "پر" },
+  monthly: { free: "آزاد و پایدار", held: "رزرو شده", busy: "پر" },
 };
 
 export type AvailabilityMode = "now" | "deskFirst" | "timeFirst" | "week";
