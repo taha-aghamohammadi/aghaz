@@ -145,7 +145,7 @@ export function LiveDeskMap() {
   return (
     <section
       id="desks"
-      className="scroll-mt-24 border-b border-hairline bg-surface/40 py-24 md:py-32"
+      className="scroll-mt-24 scroll-pb-24 border-b border-hairline bg-surface/40 py-24 md:py-32"
     >
       <div className="mx-auto max-w-7xl px-6">
         <div className="grid gap-10 md:grid-cols-[0.85fr_1.15fr] md:items-center">
@@ -161,12 +161,27 @@ export function LiveDeskMap() {
               نقشه‌ی میزهای اشتراکی آغاز از داده‌ی واقعی سامانه به‌روز می‌شود. روی هر میز بزن و رزرو
               کن.
             </p>
-            <div className="mt-6 flex items-baseline gap-2">
+            <div
+              className="mt-6 flex items-baseline gap-2"
+              role="status"
+              aria-live="polite"
+              aria-atomic
+            >
               <span className="text-5xl font-semibold tracking-tight">
-                {error ? "–" : toFa(free)}
+                {loading ? (
+                  <span className="inline-block h-9 w-12 animate-pulse rounded bg-muted" />
+                ) : error ? (
+                  "–"
+                ) : (
+                  toFa(free)
+                )}
               </span>
               <span className="text-[13px] text-muted-foreground">
-                {error ? "وضعیت در دسترس نیست" : `میز ${labels.free} از ${toFa(desks.length)} میز`}
+                {loading
+                  ? "در حال بارگذاری…"
+                  : error
+                    ? "وضعیت در دسترس نیست"
+                    : `میز ${labels.free} از ${toFa(desks.length)} میز`}
               </span>
             </div>
             <div className="mt-6 flex flex-wrap gap-4 text-[12.5px] text-muted-foreground">
@@ -199,9 +214,10 @@ export function LiveDeskMap() {
                     <button
                       key={t}
                       type="button"
+                      aria-pressed={active}
                       onClick={() => setPlanType(t)}
                       className={cn(
-                        "rounded-full px-3 py-2 text-[12.5px] transition",
+                        "rounded-full px-3 py-2 text-[12.5px] transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-1",
                         active
                           ? "bg-primary text-primary-foreground shadow-sm"
                           : "text-muted-foreground hover:bg-surface",
@@ -219,6 +235,8 @@ export function LiveDeskMap() {
                 {!showCustomTime ? (
                   <button
                     type="button"
+                    aria-expanded={showCustomTime}
+                    aria-controls="custom-time-panel"
                     onClick={() => setShowCustomTime(true)}
                     className="inline-flex items-center gap-2 rounded-full border border-hairline bg-card px-4 py-2 text-[12px] text-muted-foreground transition hover:bg-surface"
                   >
@@ -226,7 +244,7 @@ export function LiveDeskMap() {
                     زمان دلخواه
                   </button>
                 ) : (
-                  <div className="flex flex-wrap items-end gap-3">
+                  <div id="custom-time-panel" className="flex flex-wrap items-end gap-3">
                     <div>
                       <div className="text-[10px] font-medium tracking-widest text-muted-foreground">
                         تاریخ
@@ -329,7 +347,11 @@ export function LiveDeskMap() {
               ) : loading ? (
                 <p className="py-8 text-center text-[13px] text-muted-foreground">بارگذاری نقشه…</p>
               ) : (
-                <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
+                <div
+                  className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4"
+                  role="list"
+                  aria-label="لیست میزها"
+                >
                   {desks.map((d) => {
                     const deskMeta = DESK_DISPLAY_META[d.displayStatus];
                     const isFree = d.displayStatus === "free";
@@ -339,6 +361,8 @@ export function LiveDeskMap() {
                       <button
                         key={d.id}
                         type="button"
+                        aria-label={`${d.name} ${d.zone} ${labels[d.displayStatus]}`}
+                        aria-pressed={isSelected}
                         onClick={() => setSelected(d)}
                         className={`group cursor-pointer rounded-2xl border p-3 text-right transition ${deskMeta.cell} ${
                           isFree ? "" : "opacity-80"

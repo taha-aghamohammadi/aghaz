@@ -36,11 +36,7 @@ import {
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { toast } from "sonner";
 import { type Receipt } from "@/components/site/receipt-document";
-import {
-  createUserBooking,
-  listPublicDesks,
-  type PublicDesk,
-} from "@/lib/booking.functions";
+import { createUserBooking, listPublicDesks, type PublicDesk } from "@/lib/booking.functions";
 import { submitReceipt } from "@/lib/receipt.functions";
 import {
   BUSINESS_HOUR_END,
@@ -193,6 +189,8 @@ export function BookingProvider({ children }: { children: React.ReactNode }) {
   const [cardFile, setCardFile] = useState<File | null>(null);
   const [submittingReceipt, setSubmittingReceipt] = useState(false);
   const [createdBookingId, setCreatedBookingId] = useState<string | null>(null);
+  const [submitError, setSubmitError] = useState("");
+  const errorRef = React.useRef<HTMLDivElement>(null);
 
   const [zoneFilter, setZoneFilter] = useState("");
   const [featureFilter, setFeatureFilter] = useState("");
@@ -277,6 +275,7 @@ export function BookingProvider({ children }: { children: React.ReactNode }) {
       setPaymentDone(false);
       setCardFile(null);
       setCreatedBookingId(null);
+      setSubmitError("");
       setOpen(true);
     },
     [preferredType],
@@ -389,7 +388,8 @@ export function BookingProvider({ children }: { children: React.ReactNode }) {
   const selectedIds = useMemo(() => new Set(selectedDesks.map((d) => d.id)), [selectedDesks]);
   const atCap = selectedDesks.length >= pricing.maxDesksPerBooking;
   const deskConflict = selectedDesks.some(
-    (sd) => !desksLoading && availableDesks.some((d) => d.id === sd.id && d.displayStatus !== "free"),
+    (sd) =>
+      !desksLoading && availableDesks.some((d) => d.id === sd.id && d.displayStatus !== "free"),
   );
 
   const tehranNow = useMemo(() => {
@@ -477,9 +477,7 @@ export function BookingProvider({ children }: { children: React.ReactNode }) {
                 onClick={() => toggleDesk(d)}
                 className={cn(
                   "rounded-xl border p-3 text-right transition",
-                  isSelected
-                    ? "border-primary/60 bg-primary/5 ring-1 ring-primary/30"
-                    : meta.cell,
+                  isSelected ? "border-primary/60 bg-primary/5 ring-1 ring-primary/30" : meta.cell,
                   disabled ? "cursor-not-allowed opacity-85" : "cursor-pointer",
                 )}
               >
@@ -585,7 +583,12 @@ export function BookingProvider({ children }: { children: React.ReactNode }) {
           <div className="mt-6 text-[11px] font-medium tracking-widest text-muted-foreground">
             ساعت شروع
           </div>
-          <div className="mt-2 grid grid-cols-5 gap-1.5 sm:grid-cols-7" dir="ltr">
+          <div
+            className="mt-2 grid grid-cols-5 gap-1.5 sm:grid-cols-7"
+            dir="ltr"
+            role="group"
+            aria-label="ساعت شروع"
+          >
             {HOURS.map((h) => {
               const active = h === startHour;
               const isPast = dateIsToday && h < minStartHour;
@@ -594,6 +597,7 @@ export function BookingProvider({ children }: { children: React.ReactNode }) {
                   key={h}
                   type="button"
                   disabled={isPast}
+                  aria-pressed={active}
                   onClick={() => setStartHour(h)}
                   className={cn(
                     "rounded-lg border px-2 py-2.5 text-[12px] transition",
@@ -698,7 +702,10 @@ export function BookingProvider({ children }: { children: React.ReactNode }) {
         },
       });
       if (result.unavailableDeskCodes?.length) {
-        toast.error(`میزهای ${result.unavailableDeskCodes.join(", ")} در بازه‌ی انتخابی رزرو شده‌اند.`);
+        const msg = `میزهای ${result.unavailableDeskCodes.join(", ")} در بازه‌ی انتخابی رزرو شده‌اند.`;
+        setSubmitError(msg);
+        toast.error(msg);
+        requestAnimationFrame(() => errorRef.current?.focus());
         return;
       }
       const row = result as { id: string; code: string; unit_price: number; total_amount: number };
@@ -732,9 +739,10 @@ export function BookingProvider({ children }: { children: React.ReactNode }) {
         /* optional */
       }
 
-      const deskLabel = selectedDesks.length === 1
-        ? `${selectedDesks[0].code} · ${selectedDesks[0].name}`
-        : `${selectedDesks.length} میز`;
+      const deskLabel =
+        selectedDesks.length === 1
+          ? `${selectedDesks[0].code} · ${selectedDesks[0].name}`
+          : `${selectedDesks.length} میز`;
 
       setReceipt({
         code,
@@ -763,7 +771,10 @@ export function BookingProvider({ children }: { children: React.ReactNode }) {
         description: deskLabel + " — پس از تأیید توسط پذیرش، رزرو نهایی می‌شود.",
       });
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : "ثبت رزرو ناموفق بود");
+      const msg = e instanceof Error ? e.message : "ثبت رزرو ناموفق بود";
+      setSubmitError(msg);
+      toast.error(msg);
+      requestAnimationFrame(() => errorRef.current?.focus());
     } finally {
       setConfirming(false);
     }
@@ -1008,7 +1019,9 @@ export function BookingProvider({ children }: { children: React.ReactNode }) {
                     <Row label="مدت" value={receipt.quantity} />
                     <Row
                       label="میز"
-                      value={selectedDesks.length > 0 ? selectedDesks.map((d) => d.code).join(", ") : "—"}
+                      value={
+                        selectedDesks.length > 0 ? selectedDesks.map((d) => d.code).join(", ") : "—"
+                      }
                     />
                     <Row label="وضعیت" value={receipt.statusLabel ?? "در انتظار تأیید"} />
                     <Row
@@ -1067,7 +1080,9 @@ export function BookingProvider({ children }: { children: React.ReactNode }) {
                 <div className="mt-6 rounded-xl border border-hairline bg-surface/50 p-4">
                   <div className="flex items-center justify-between text-[12.5px] text-muted-foreground">
                     <span>میزها ({selectedDesks.length})</span>
-                    <span className="text-foreground">{selectedDesks.map((d) => d.code).join(", ")}</span>
+                    <span className="text-foreground">
+                      {selectedDesks.map((d) => d.code).join(", ")}
+                    </span>
                   </div>
                   <div className="mt-2 flex items-center justify-between text-[12.5px] text-muted-foreground">
                     <span>پلن</span>
@@ -1099,6 +1114,18 @@ export function BookingProvider({ children }: { children: React.ReactNode }) {
                     یکی از میزهای انتخاب‌شده در بازه‌ی انتخابی رزرو شده است. میز دیگری انتخاب کن.
                   </div>
                 )}
+                <div
+                  ref={errorRef}
+                  role="alert"
+                  tabIndex={-1}
+                  className={`w-full rounded-lg border px-3 py-2 text-[12px] outline-none focus-visible:ring-2 focus-visible:ring-destructive ${
+                    submitError
+                      ? "border-destructive/30 bg-destructive/10 text-destructive"
+                      : "hidden"
+                  }`}
+                >
+                  {submitError}
+                </div>
                 <Button
                   onClick={handleConfirm}
                   disabled={confirming || deskConflict}

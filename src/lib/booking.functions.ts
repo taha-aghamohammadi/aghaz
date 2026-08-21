@@ -12,13 +12,13 @@ import {
   iranDateTime,
   isDeskAvailable,
   mapPublicDesk,
-  unitPriceForDesk,
+  unitPriceForType,
   type BookingType,
   type PublicDesk,
 } from "@/lib/booking.service";
 
 const bookingInputSchema = z.object({
-  deskIds: z.array(z.string().uuid()).min(1),
+  deskId: z.string().uuid(),
   bookingType: z.enum(["hourly", "daily", "monthly"]),
   dateStr: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
   startHour: z.number().int().min(BUSINESS_HOUR_START).max(BUSINESS_HOUR_END).optional(),
@@ -118,25 +118,15 @@ export const createUserBooking = createServerFn({ method: "POST" })
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
     const supabase = context.supabase;
 
-    const pricing = await fetchPricingSettings(supabaseAdmin);
-
-    if (data.deskIds.length > pricing.maxDesksPerBooking) {
-      throw new Error(`حداکثر ${pricing.maxDesksPerBooking} میز قابل رزرو است.`);
-    }
-
-    const { data: desks, error: desksErr } = await supabase
+    const { data: desk, error: deskErr } = await supabase
       .from("desks")
       .select("*")
-      .in("id", data.deskIds)
-      .eq("is_active", true);
+      .eq("id", data.deskId)
+      .eq("is_active", true)
+      .maybeSingle();
 
-    if (desksErr || !desks || desks.length !== data.deskIds.length) {
-      throw new Error("یک یا چند میز انتخاب‌شده موجود نیست.");
-    }
-    const maintenanceDesk = desks.find((d) => d.status === "maintenance");
-    if (maintenanceDesk) {
-      throw new Error(`میز ${maintenanceDesk.code} در تعمیر است.`);
-    }
+    if (deskErr || !desk) throw new Error("میز انتخاب‌شده موجود نیست.");
+    if (desk.status === "maintenance") throw new Error("این میز در تعمیر است.");
 
     const window = computeBookingWindow({
       bookingType: data.bookingType,
@@ -146,29 +136,17 @@ export const createUserBooking = createServerFn({ method: "POST" })
       months: data.months,
     });
 
-    const unavailableDeskCodes: string[] = [];
-    for (const desk of desks) {
-      const available = await isDeskAvailable(
-        supabaseAdmin,
-        desk.id,
-        window.startAt,
-        window.endAt,
-      );
-      if (!available) unavailableDeskCodes.push(desk.code);
-    }
+    const available = await isDeskAvailable(
+      supabaseAdmin,
+      data.deskId,
+      window.startAt,
+      window.endAt,
+    );
+    if (!available) throw new Error("این میز در بازه انتخابی رزرو شده است.");
 
-    if (unavailableDeskCodes.length > 0) {
-      return { unavailableDeskCodes };
-    }
-
-    const firstUnitPrice = unitPriceForDesk(desks[0], data.bookingType);
-    let totalAmount = 0;
-    const deskPrices: { desk: (typeof desks)[number]; unitPrice: number }[] = [];
-    for (const desk of desks) {
-      const unitPrice = unitPriceForDesk(desk, data.bookingType);
-      totalAmount += computeTotalAmount(unitPrice, window.units);
-      deskPrices.push({ desk, unitPrice });
-    }
+    const pricing = await fetchPricingSettings(supabaseAdmin);
+    const unitPrice = unitPriceForType(pricing, data.bookingType);
+    const totalAmount = computeTotalAmount(unitPrice, window.units);
 
     const { data: profile } = await supabase
       .from("profiles")
@@ -187,19 +165,18 @@ export const createUserBooking = createServerFn({ method: "POST" })
       code = generateBookingCode();
     }
 
-    const firstDesk = desks[0];
     const { data: row, error } = await supabase
       .from("bookings")
       .insert({
         code,
         user_id: context.userId,
-        desk_id: firstDesk.id,
-        desk_code: firstDesk.code,
+        desk_id: data.deskId,
+        desk_code: desk.code,
         booking_type: data.bookingType,
         start_at: window.startAt,
         end_at: window.endAt,
         units: window.units,
-        unit_price: firstUnitPrice,
+        unit_price: unitPrice,
         total_amount: totalAmount,
         status: "pending",
         payment_status: "unpaid",
@@ -213,21 +190,7 @@ export const createUserBooking = createServerFn({ method: "POST" })
       .single();
 
     if (error) throw new Error("ثبت رزرو ناموفق بود.");
-
-    const junctionRows = deskPrices.map(({ desk, unitPrice: up }) => ({
-      booking_id: row.id,
-      desk_id: desk.id,
-      desk_code: desk.code,
-      unit_price: up,
-    }));
-
-    const { error: jErr } = await supabase.from("booking_desks").insert(junctionRows);
-    if (jErr) {
-      await supabase.from("bookings").delete().eq("id", row.id);
-      throw new Error("ثبت جزئیات رزرو ناموفق بود.");
-    }
-
-    return { ...row, desk_ids: data.deskIds };
+    return row;
   });
 
 export const cancelMyBooking = createServerFn({ method: "POST" })
