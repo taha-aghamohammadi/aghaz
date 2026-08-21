@@ -175,6 +175,7 @@ export function BookingProvider({ children }: { children: React.ReactNode }) {
 
   const [open, setOpen] = useState(false);
   const [selectedDesks, setSelectedDesks] = useState<PublicDesk[]>([]);
+  const [showDeskList, setShowDeskList] = useState(true);
   const [pricing, setPricing] = useState<PricingTiers>(DEFAULT_PRICING);
   const [availableDesks, setAvailableDesks] = useState<PublicDesk[]>([]);
   const [desksLoading, setDesksLoading] = useState(false);
@@ -243,6 +244,7 @@ export function BookingProvider({ children }: { children: React.ReactNode }) {
       setDuration(pending.duration);
       setMonths(pending.months);
       setReceipt(null);
+      setShowDeskList(false);
       setOpen(true);
       toast.message("ادامه رزرو", { description: "ورود موفق بود. رزرو را تأیید کنید." });
     } catch {
@@ -262,10 +264,12 @@ export function BookingProvider({ children }: { children: React.ReactNode }) {
     (options?: BookingOpenOptions) => {
       if (options?.desk) {
         setSelectedDesks([options.desk]);
+        setShowDeskList(false);
         setType(options.type ?? preferredType ?? "hourly");
         setPreferredType(null);
       } else {
         setSelectedDesks([]);
+        setShowDeskList(true);
         setType(options?.type ?? "hourly");
       }
       setDate(options?.date ?? new Date());
@@ -348,7 +352,12 @@ export function BookingProvider({ children }: { children: React.ReactNode }) {
   const toggleDesk = useCallback((desk: PublicDesk) => {
     setSelectedDesks((prev) => {
       const idx = prev.findIndex((d) => d.id === desk.id);
-      if (idx >= 0) return prev.filter((d) => d.id !== desk.id);
+      if (idx >= 0) {
+        const next = prev.filter((d) => d.id !== desk.id);
+        if (next.length === 0) setShowDeskList(true);
+        return next;
+      }
+      setShowDeskList(false);
       return [...prev, desk];
     });
   }, []);
@@ -815,7 +824,7 @@ export function BookingProvider({ children }: { children: React.ReactNode }) {
                 variant="ghost"
                 size="sm"
                 className="h-9 self-start rounded-full px-3 text-[12px] text-muted-foreground"
-                onClick={() => setSelectedDesks([])}
+                onClick={() => setShowDeskList(true)}
               >
                 تغییر میزها
               </Button>
@@ -1045,7 +1054,7 @@ export function BookingProvider({ children }: { children: React.ReactNode }) {
                 </Button>
               </DialogFooter>
             </>
-          ) : selectedDesks.length === 0 ? (
+          ) : selectedDesks.length === 0 || showDeskList ? (
             <div className="max-h-[70vh] overflow-y-auto px-6 py-5">
               <div className="space-y-6">{timeControls}</div>
               {deskGrid}
