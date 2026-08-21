@@ -13,6 +13,7 @@ export type PricingTiers = {
   monthlyRate: number;
   discountPercent: number;
   discountEndsAt: string | null;
+  maxDesksPerBooking: number;
 };
 
 type PricingRow = Database["public"]["Tables"]["pricing_settings"]["Row"];
@@ -134,6 +135,7 @@ export function mapPricingRow(row: PricingRow): PricingTiers {
     monthlyRate: row.monthly_rate,
     discountPercent: row.discount_percent ?? 0,
     discountEndsAt: row.discount_ends_at,
+    maxDesksPerBooking: row.max_desks_per_booking ?? 4,
   };
 }
 
@@ -143,6 +145,7 @@ export const DEFAULT_PRICING: PricingTiers = {
   monthlyRate: 7900000,
   discountPercent: 0,
   discountEndsAt: null,
+  maxDesksPerBooking: 4,
 };
 
 export function isDiscountActive(pricing: PricingTiers): boolean {
@@ -200,7 +203,8 @@ export async function findOverlappingBookings(
   startAt: string,
   endAt: string,
 ): Promise<BookingRow[]> {
-  const { data, error } = await client
+  // Direct bookings (backward compat with desk_id column)
+  const { data: directBookings, error: err1 } = await client
     .from("bookings")
     .select("*")
     .eq("desk_id", deskId)
@@ -208,8 +212,38 @@ export async function findOverlappingBookings(
     .lt("start_at", endAt)
     .gt("end_at", startAt);
 
-  if (error) throw new Error("بررسی ظرفیت میز ناموفق بود.");
-  return data ?? [];
+  if (err1) throw new Error("بررسی ظرفیت میز ناموفق بود.");
+
+  // Group bookings via booking_desks junction table
+  const { data: groupBookingIds, error: err2 } = await client
+    .from("booking_desks")
+    .select("booking_id")
+    .eq("desk_id", deskId);
+
+  if (err2) throw new Error("بررسی ظرفیت میز ناموفق بود.");
+
+  const groupIds = (groupBookingIds ?? []).map((r) => r.booking_id);
+  let groupBookings: BookingRow[] = [];
+  if (groupIds.length > 0) {
+    const { data, error: err3 } = await client
+      .from("bookings")
+      .select("*")
+      .in("id", groupIds)
+      .neq("status", "cancelled")
+      .lt("start_at", endAt)
+      .gt("end_at", startAt);
+    if (err3) throw new Error("بررسی ظرفیت میز ناموفق بود.");
+    groupBookings = data ?? [];
+  }
+
+  // Merge and dedupe by booking id
+  const all = [...(directBookings ?? []), ...groupBookings];
+  const seen = new Set<string>();
+  return all.filter((b) => {
+    if (seen.has(b.id)) return false;
+    seen.add(b.id);
+    return true;
+  });
 }
 
 export async function isDeskAvailable(
