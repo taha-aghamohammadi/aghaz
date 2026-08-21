@@ -117,15 +117,13 @@ export function LiveDeskMap() {
   }, [hourlyWindow, planWindow, loadWindow]);
 
   useEffect(() => {
-    let active = true;
     setLoading(true);
     const win = hourlyWindow;
     const params = win ? { windowStart: win.startAt, windowEnd: win.endAt } : (planWindow ?? {});
-    const load = () => void loadWindow(params).then(() => active);
+    const load = () => void loadWindow(params);
     load();
-    const timer = setInterval(load, 60_000);
+    const timer = setInterval(load, 120_000);
     return () => {
-      active = false;
       clearInterval(timer);
     };
   }, [hourlyWindow, planWindow, loadWindow]);
@@ -166,6 +164,7 @@ export function LiveDeskMap() {
               role="status"
               aria-live="polite"
               aria-atomic
+              aria-busy={loading}
             >
               <span className="text-5xl font-semibold tracking-tight">
                 {loading ? (
@@ -217,7 +216,7 @@ export function LiveDeskMap() {
                       aria-pressed={active}
                       onClick={() => setPlanType(t)}
                       className={cn(
-                        "rounded-full px-3 py-2 text-[12.5px] transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-1",
+                        "rounded-full px-4 py-3 text-[12.5px] transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-1",
                         active
                           ? "bg-primary text-primary-foreground shadow-sm"
                           : "text-muted-foreground hover:bg-surface",
@@ -238,7 +237,7 @@ export function LiveDeskMap() {
                     aria-expanded={showCustomTime}
                     aria-controls="custom-time-panel"
                     onClick={() => setShowCustomTime(true)}
-                    className="inline-flex items-center gap-2 rounded-full border border-hairline bg-card px-4 py-2 text-[12px] text-muted-foreground transition hover:bg-surface"
+                    className="inline-flex items-center gap-2 rounded-full border border-hairline bg-card px-4 py-2.5 text-[12px] text-muted-foreground transition hover:bg-surface"
                   >
                     <Clock className="h-3.5 w-3.5" />
                     زمان دلخواه
@@ -280,6 +279,7 @@ export function LiveDeskMap() {
                         ساعت شروع
                       </div>
                       <select
+                        aria-label="ساعت شروع"
                         value={customStartHour}
                         onChange={(e) => setCustomStartHour(Number(e.target.value))}
                         className="mt-1 h-11 rounded-xl border border-hairline bg-card px-2 text-[12.5px]"
@@ -296,6 +296,7 @@ export function LiveDeskMap() {
                         مدت
                       </div>
                       <select
+                        aria-label="مدت اجاره"
                         value={customDuration}
                         onChange={(e) => setCustomDuration(Number(e.target.value))}
                         className="mt-1 h-11 rounded-xl border border-hairline bg-card px-2 text-[12.5px]"
@@ -404,13 +405,15 @@ export function LiveDeskMap() {
                       <span
                         className={`h-1.5 w-1.5 rounded-full ${DESK_DISPLAY_META[selected.displayStatus].dot}`}
                       />
-                      {labels[selected.displayStatus]} ·{" "}
-                      {toman(unitPriceForType(pricing, planType))}
+                      <span aria-live="polite">
+                        {labels[selected.displayStatus]} ·{" "}
+                        {toman(unitPriceForType(pricing, planType))}
+                      </span>
                     </div>
                   </div>
                 </div>
                 <Button
-                  className="shrink-0 rounded-full px-6"
+                  className="shrink-0 h-11 rounded-full px-6"
                   disabled={selected.displayStatus !== "free"}
                   onClick={() => {
                     setSelected(null);

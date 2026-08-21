@@ -150,6 +150,7 @@ function FilterChip({
   return (
     <button
       type="button"
+      aria-pressed={active}
       onClick={onClick}
       className={cn(
         "rounded-full border px-3 py-1 text-[11.5px] transition",
@@ -463,7 +464,7 @@ export function BookingProvider({ children }: { children: React.ReactNode }) {
           میزی مطابق فیلتر پیدا نشد.
         </p>
       ) : (
-        <div className="mt-3 grid gap-2 sm:grid-cols-2">
+        <div className="mt-3 grid gap-2 sm:grid-cols-2" role="list" aria-label="لیست میزها">
           {filteredDesks.map((d) => {
             const meta = DESK_DISPLAY_META[d.displayStatus];
             const isFree = d.displayStatus === "free";
@@ -474,6 +475,7 @@ export function BookingProvider({ children }: { children: React.ReactNode }) {
                 key={d.id}
                 type="button"
                 disabled={disabled}
+                title={disabled && atCap && !isSelected ? "حداکثر ۴ میز" : undefined}
                 onClick={() => toggleDesk(d)}
                 className={cn(
                   "rounded-xl border p-3 text-right transition",
@@ -520,6 +522,7 @@ export function BookingProvider({ children }: { children: React.ReactNode }) {
             <button
               key={tid}
               type="button"
+              aria-pressed={active}
               onClick={() => setType(tid)}
               className={cn(
                 "rounded-xl border p-3 text-right transition",
@@ -815,7 +818,18 @@ export function BookingProvider({ children }: { children: React.ReactNode }) {
   return (
     <BookingCtx.Provider value={ctx}>
       {children}
-      <Dialog open={open} onOpenChange={setOpen}>
+      <Dialog
+        open={open}
+        onOpenChange={(next) => {
+          setOpen(next);
+          if (!next) {
+            requestAnimationFrame(() => {
+              const firstDesk = document.querySelector<HTMLElement>("#desks [role='list'] button");
+              firstDesk?.focus();
+            });
+          }
+        }}
+      >
         <DialogContent className="max-w-lg p-0 gap-0 overflow-hidden" dir="rtl">
           <DialogHeader className="border-b border-hairline px-6 py-4 text-right space-y-1">
             <DialogTitle className="text-[17px]">
@@ -837,7 +851,7 @@ export function BookingProvider({ children }: { children: React.ReactNode }) {
                 className="h-9 self-start rounded-full px-3 text-[12px] text-muted-foreground"
                 onClick={() => setShowDeskList(true)}
               >
-                تغییر میزها
+                {selectedDesks.length > 1 ? "تغییر میزها" : "تغییر میز"}
               </Button>
             )}
           </DialogHeader>
@@ -862,6 +876,8 @@ export function BookingProvider({ children }: { children: React.ReactNode }) {
                   <button
                     type="button"
                     disabled
+                    aria-disabled
+                    title="به‌زودی"
                     className="cursor-not-allowed rounded-xl border border-hairline bg-surface p-3 text-right opacity-50"
                   >
                     <div className="text-[13px] font-semibold">پرداخت آنلاین</div>
@@ -870,6 +886,8 @@ export function BookingProvider({ children }: { children: React.ReactNode }) {
                   <button
                     type="button"
                     disabled
+                    aria-disabled
+                    title="به‌زودی"
                     className="cursor-not-allowed rounded-xl border border-hairline bg-surface p-3 text-right opacity-50"
                   >
                     <div className="text-[13px] font-semibold">کیف پول</div>
@@ -932,6 +950,7 @@ export function BookingProvider({ children }: { children: React.ReactNode }) {
                       id="receipt-file"
                       type="file"
                       accept="image/*"
+                      aria-label="تصویر رسید واریز"
                       className="mt-2"
                       disabled={!cardInfo.cardNumber}
                       onChange={(e) => {
@@ -1101,7 +1120,7 @@ export function BookingProvider({ children }: { children: React.ReactNode }) {
                     </div>
                   )}
                   <div className="my-3 h-px bg-hairline" />
-                  <div className="flex items-center justify-between">
+                  <div className="flex items-center justify-between" aria-live="polite">
                     <span className="text-[13px] font-medium">مبلغ قابل پرداخت</span>
                     <span className="text-[15px] font-semibold">{formatToman(total)}</span>
                   </div>
@@ -1177,6 +1196,7 @@ function Stepper({
       <div className="mt-2 flex items-center gap-3">
         <button
           type="button"
+          aria-label="کاهش"
           onClick={() => onChange(Math.max(min, value - 1))}
           disabled={value <= min}
           className="grid h-11 w-11 place-items-center rounded-full border border-hairline bg-card text-muted-foreground transition hover:bg-surface disabled:opacity-40"
@@ -1188,6 +1208,7 @@ function Stepper({
         </div>
         <button
           type="button"
+          aria-label="افزایش"
           onClick={() => onChange(Math.min(max, value + 1))}
           disabled={value >= max}
           className="grid h-11 w-11 place-items-center rounded-full border border-hairline bg-card text-muted-foreground transition hover:bg-surface disabled:opacity-40"
