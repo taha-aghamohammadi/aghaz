@@ -18,7 +18,6 @@ import {
 import { toman, toFa, faJalaliDate } from "@/lib/fa-format";
 
 import { DESK_DISPLAY_META, PLAN_DESK_LABELS } from "@/components/site/desk-display-meta";
-import { FloorPlanView } from "@/components/site/floor-plan-view";
 import { DeskTimelineView } from "@/components/site/desk-timeline-view";
 import { cn } from "@/lib/utils";
 import { format } from "date-fns";
@@ -52,7 +51,7 @@ export function LiveDeskMap() {
   const [selected, setSelected] = useState<PublicDesk | null>(null);
 
   const [planType, setPlanType] = useState<BookingType>(preferredType ?? "hourly");
-  const [view, setView] = useState<"grid" | "plan" | "timeline">("grid");
+  const [view, setView] = useState<"grid" | "timeline">("grid");
 
   const [showCustomTime, setShowCustomTime] = useState(false);
   const [customDate, setCustomDate] = useState<Date | undefined>(() => {
@@ -219,7 +218,6 @@ export function LiveDeskMap() {
                 {(
                   [
                     { id: "grid", label: "شبکه‌ای" },
-                    { id: "plan", label: "پلان سالن" },
                     { id: "timeline", label: "زمان‌بندی" },
                   ] as const
                 ).map((v) => {
@@ -357,13 +355,6 @@ export function LiveDeskMap() {
                 </div>
               ) : loading ? (
                 <p className="py-8 text-center text-[13px] text-muted-foreground">بارگذاری نقشه…</p>
-              ) : view === "plan" ? (
-                <FloorPlanView
-                  desks={desks}
-                  labels={labels}
-                  selectedId={selected?.id}
-                  onSelect={setSelected}
-                />
               ) : view === "timeline" ? (
                 <DeskTimelineView desks={desks} selectedId={selected?.id} onSelect={setSelected} />
               ) : (
