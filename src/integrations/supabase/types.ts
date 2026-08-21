@@ -82,6 +82,48 @@ export type Database = {
           },
         ];
       };
+      booking_desks: {
+        Row: {
+          id: string;
+          booking_id: string;
+          desk_id: string;
+          desk_code: string;
+          unit_price: number;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          booking_id: string;
+          desk_id: string;
+          desk_code: string;
+          unit_price: number;
+          created_at?: string;
+        };
+        Update: {
+          id?: string;
+          booking_id?: string;
+          desk_id?: string;
+          desk_code?: string;
+          unit_price?: number;
+          created_at?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "booking_desks_booking_id_fkey";
+            columns: ["booking_id"];
+            isOneToOne: false;
+            referencedRelation: "bookings";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "booking_desks_desk_id_fkey";
+            columns: ["desk_id"];
+            isOneToOne: false;
+            referencedRelation: "desks";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
       desks: {
         Row: {
           code: string;
@@ -140,6 +182,7 @@ export type Database = {
           monthly_rate: number;
           discount_percent: number;
           discount_ends_at: string | null;
+          max_desks_per_booking: number;
           updated_at: string;
         };
         Insert: {
@@ -151,6 +194,7 @@ export type Database = {
           monthly_rate?: number;
           discount_percent?: number;
           discount_ends_at?: string | null;
+          max_desks_per_booking?: number;
           updated_at?: string;
         };
         Update: {
@@ -162,6 +206,7 @@ export type Database = {
           monthly_rate?: number;
           discount_percent?: number;
           discount_ends_at?: string | null;
+          max_desks_per_booking?: number;
           updated_at?: string;
         };
         Relationships: [];
