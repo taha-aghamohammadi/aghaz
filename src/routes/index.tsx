@@ -14,10 +14,8 @@ import {
   MonitorSmartphone,
   Plus,
   QrCode,
-  ScanFace,
   Sparkles,
   Star,
-  Timer,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
@@ -83,8 +81,8 @@ function Landing() {
           <LogosStrip />
           <Features />
           <Gallery />
-          <HowItWorks />
           <LiveDeskMap />
+          <HowItWorks />
           <Pricing tiers={tiers} />
           <Testimonials />
           <FAQ />
@@ -135,12 +133,7 @@ function buildLandingTiers(pricing: PricingTiers): LandingTier[] {
       price: pricingMainAmount(unitPriceForType(pricing, "monthly")),
       unit: pricingUnitLabel(unitPriceForType(pricing, "monthly"), "month"),
       tint: "from-primary/25",
-      features: [
-        "استفاده نامحدود از میز آزاد",
-        "اولویت در رزرو",
-        "کافه اختصاصی",
-        "پاس مهمان",
-      ],
+      features: ["استفاده نامحدود از میز آزاد", "اولویت در رزرو", "کافه اختصاصی", "پاس مهمان"],
       featured: true,
     },
   ];
@@ -164,15 +157,16 @@ function Hero() {
             <ArrowLeft className="h-3.5 w-3.5" />
           </div>
           <h1 className="mt-6 text-balance text-5xl font-semibold leading-[1.15] tracking-tight md:text-7xl">
-            هر اتفاق بزرگی،<br />
+            هر اتفاق بزرگی،
+            <br />
             <span className="bg-gradient-to-br from-foreground to-foreground/60 bg-clip-text text-transparent">
               یک آغاز دارد.
             </span>
           </h1>
 
           <p className="mx-auto mt-6 max-w-2xl text-balance text-lg leading-relaxed text-muted-foreground">
-            آغاز یک تجربه کار اشتراکی هوشمنده؛ میز خودت رو ساعتی، روزانه
-            یا ماهانه رزرو کن — پرداخت، ورود و مدیریت کاملاً آنلاین.
+            آغاز یک تجربه کار اشتراکی هوشمنده؛ میز خودت رو ساعتی، روزانه یا ماهانه رزرو کن — پرداخت،
+            ورود و مدیریت کاملاً آنلاین.
           </p>
           <div className="mt-9 flex flex-col items-center justify-center gap-3 sm:flex-row">
             <Button
@@ -183,13 +177,22 @@ function Hero() {
               انتخاب میز
               <ArrowLeft className="mr-1.5 h-4 w-4" />
             </Button>
-            <Button size="lg" variant="outline" asChild className="h-12 rounded-full border-hairline bg-background/60 px-6 text-[14px] backdrop-blur">
+            <Button
+              size="lg"
+              variant="outline"
+              asChild
+              className="h-12 rounded-full border-hairline bg-background/60 px-6 text-[14px] backdrop-blur"
+            >
               <a href="#pricing">مشاهده تعرفه‌ها</a>
             </Button>
           </div>
           <div className="mt-8 flex flex-wrap items-center justify-center gap-x-6 gap-y-2 text-xs text-muted-foreground">
-            <span className="inline-flex items-center gap-1.5"><Check className="h-3.5 w-3.5 text-primary" /> بدون نیاز به اپ</span>
-            <span className="inline-flex items-center gap-1.5"><Check className="h-3.5 w-3.5 text-primary" /> پرداخت آنلاین</span>
+            <span className="inline-flex items-center gap-1.5">
+              <Check className="h-3.5 w-3.5 text-primary" /> بدون نیاز به اپ
+            </span>
+            <span className="inline-flex items-center gap-1.5">
+              <Check className="h-3.5 w-3.5 text-primary" /> پرداخت آنلاین
+            </span>
           </div>
         </div>
       </div>
@@ -201,10 +204,22 @@ function Hero() {
 
 function Gallery() {
   const photos = [
-    { src: spaceImages.space4, alt: "میزهای کنار پنجره در فضای ساکت", w: 1200, h: 1600, cls: "sm:col-span-2 sm:row-span-2" },
+    {
+      src: spaceImages.space4,
+      alt: "میزهای کنار پنجره در فضای ساکت",
+      w: 1200,
+      h: 1600,
+      cls: "sm:col-span-2 sm:row-span-2",
+    },
     { src: spaceImages.space3, alt: "لانج و کافه فضای کار آغاز", w: 1200, h: 1200, cls: "" },
     { src: spaceImages.space2, alt: "جزئیات میز اشتراکی آماده کار", w: 1200, h: 1200, cls: "" },
-    { src: spaceImages.space5, alt: "ورودی و پذیرش فضای کار آغاز", w: 1600, h: 1104, cls: "sm:col-span-2" },
+    {
+      src: spaceImages.space5,
+      alt: "ورودی و پذیرش فضای کار آغاز",
+      w: 1600,
+      h: 1104,
+      cls: "sm:col-span-2",
+    },
   ];
 
   return (
@@ -257,7 +272,10 @@ function LogosStrip() {
           <div className="pointer-events-none absolute inset-y-0 left-0 w-24 bg-gradient-to-r from-background to-transparent" />
           <div className="flex w-max animate-marquee items-center gap-14 whitespace-nowrap">
             {[...items, ...items].map((n, i) => (
-              <span key={i} className="text-lg font-semibold tracking-widest text-muted-foreground/70">
+              <span
+                key={i}
+                className="text-lg font-semibold tracking-widest text-muted-foreground/70"
+              >
                 {n}
               </span>
             ))}
@@ -272,9 +290,21 @@ function LogosStrip() {
 
 function Features() {
   const items = [
-    { icon: Calendar, title: "رزرو هوشمند", desc: "در چند ثانیه میزت رو ساعتی، روزانه یا ماهانه رزرو کن." },
-    { icon: KeyRound, title: "درب هوشمند", desc: "در ساعت رزروت، درب ساختمان با حساب کاربری‌ت باز می‌شه." },
-    { icon: QrCode, title: "پرداخت آنلاین", desc: "کارت بانکی، کیف پول یا اعتبار اشتراک — همه در چند ثانیه." },
+    {
+      icon: Calendar,
+      title: "رزرو هوشمند",
+      desc: "در چند ثانیه میزت رو ساعتی، روزانه یا ماهانه رزرو کن.",
+    },
+    {
+      icon: KeyRound,
+      title: "درب هوشمند",
+      desc: "در ساعت رزروت، درب ساختمان با حساب کاربری‌ت باز می‌شه.",
+    },
+    {
+      icon: QrCode,
+      title: "پرداخت آنلاین",
+      desc: "کارت بانکی، کیف پول یا اعتبار اشتراک — همه در چند ثانیه.",
+    },
     { icon: Coffee, title: "کافه اختصاصی", desc: "قهوه تخصصی، نامحدود — مهمون ما." },
   ];
   return (
@@ -292,7 +322,9 @@ function Features() {
                 <it.icon className="h-5 w-5" />
               </div>
               <div className="mt-5 text-[15px] font-semibold">{it.title}</div>
-              <div className="mt-1 text-[13.5px] leading-relaxed text-muted-foreground">{it.desc}</div>
+              <div className="mt-1 text-[13.5px] leading-relaxed text-muted-foreground">
+                {it.desc}
+              </div>
             </div>
           ))}
         </div>
@@ -329,7 +361,9 @@ function Pricing({ tiers }: { tiers: LandingTier[] }) {
                   : "border-hairline"
               } bg-card p-1`}
             >
-              <div className={`relative h-32 overflow-hidden rounded-xl bg-gradient-to-br ${t.tint} to-transparent`}>
+              <div
+                className={`relative h-32 overflow-hidden rounded-xl bg-gradient-to-br ${t.tint} to-transparent`}
+              >
                 <div className="absolute inset-0 grid-bg opacity-40" />
                 <div className="absolute left-3 top-3 rounded-full border border-hairline bg-background/80 px-2 py-0.5 text-[10px] backdrop-blur">
                   {t.featured ? "محبوب‌ترین" : "موجود"}
@@ -344,7 +378,10 @@ function Pricing({ tiers }: { tiers: LandingTier[] }) {
                 <p className="mt-1 text-[13.5px] text-muted-foreground">{t.desc}</p>
                 <ul className="mt-4 space-y-2">
                   {t.features.map((f) => (
-                    <li key={f} className="flex items-center gap-2 text-[13px] text-muted-foreground">
+                    <li
+                      key={f}
+                      className="flex items-center gap-2 text-[13px] text-muted-foreground"
+                    >
                       <Check className="h-3.5 w-3.5 shrink-0 text-primary" />
                       <span>{f}</span>
                     </li>
@@ -371,28 +408,52 @@ function Pricing({ tiers }: { tiers: LandingTier[] }) {
 
 function HowItWorks() {
   const steps = [
-    { icon: BadgeCheck, title: "ثبت‌نام", desc: "کمتر از یک دقیقه، حساب کاربری‌ت رو بساز." },
-    { icon: ScanFace, title: "احراز هویت", desc: "یک‌بار انجامش بده، برای همیشه معتبره." },
-    { icon: Calendar, title: "رزرو", desc: "میز، تاریخ و ساعت رو انتخاب کن." },
-    { icon: QrCode, title: "پرداخت آنلاین", desc: "کارت بانکی یا اعتبار اشتراک." },
-    { icon: DoorOpen, title: "ورود با درب هوشمند", desc: "درب رو از داشبوردت باز کن." },
-    { icon: MonitorSmartphone, title: "شروع کار", desc: "میزت آماده‌ست، بشین و کارت رو شروع کن." },
-    { icon: Timer, title: "تمدید آسان", desc: "زمان کم آوردی؟ با یک لمس تمدید کن." },
+    {
+      icon: BadgeCheck,
+      title: "ثبت‌نام و احراز",
+      desc: "کمتر از یک دقیقه حساب بساز، یه بار احراز هویت کن — برای همیشه معتبره.",
+    },
+    {
+      icon: Calendar,
+      title: "رزرو و پرداخت",
+      desc: "میز، تاریخ و ساعت رو انتخاب کن و آنلاین پرداخت کن.",
+    },
+    {
+      icon: DoorOpen,
+      title: "ورود با درب هوشمند",
+      desc: "درب رو از داشبوردت باز کن و سر میزت بشین — بدون کارت.",
+    },
+    {
+      icon: MonitorSmartphone,
+      title: "شروع و تمدید",
+      desc: "میزت آماده‌ست؛ زمان کم آوردی؟ با یک لمس تمدیدش کن.",
+    },
   ];
   return (
     <section id="how" className="border-b border-hairline py-24 md:py-32">
       <div className="mx-auto max-w-7xl px-6">
-        <SectionHeader eyebrow="چطور کار می‌کنه" title="از ثبت‌نام تا صندلی، در چند دقیقه." subtitle="یه تجربه محصولی، نه یه فرآیند اداری." />
+        <SectionHeader
+          eyebrow="چطور کار می‌کنه"
+          title="از ثبت‌نام تا صندلی، در چند دقیقه."
+          subtitle="یه تجربه محصولی، نه یه فرآیند اداری."
+        />
         <div className="relative mt-14">
           <div className="absolute right-6 top-6 h-[calc(100%-3rem)] w-px bg-hairline md:right-1/2" />
           <div className="space-y-8">
             {steps.map((s, i) => {
               const left = i % 2 === 1;
               return (
-                <div key={s.title} className={`relative grid gap-4 md:grid-cols-2 md:gap-10 ${left ? "md:[&>div:first-child]:col-start-2" : ""}`}>
-                  <div className={`relative rounded-2xl border border-hairline bg-card p-5 md:p-6 ${left ? "md:text-right" : "md:text-left"}`}>
+                <div
+                  key={s.title}
+                  className={`relative grid gap-4 md:grid-cols-2 md:gap-10 ${left ? "md:[&>div:first-child]:col-start-2" : ""}`}
+                >
+                  <div
+                    className={`relative rounded-2xl border border-hairline bg-card p-5 md:p-6 ${left ? "md:text-right" : "md:text-left"}`}
+                  >
                     <div className={`flex items-center gap-3 ${left ? "" : "md:justify-end"}`}>
-                      <span className="text-[11px] font-mono text-muted-foreground">۰{toFa(i + 1)}</span>
+                      <span className="text-[11px] font-mono text-muted-foreground">
+                        ۰{toFa(i + 1)}
+                      </span>
                       <h3 className="text-[16px] font-semibold">{s.title}</h3>
                     </div>
                     <p className="mt-2 text-[13.5px] text-muted-foreground">{s.desc}</p>
@@ -445,7 +506,10 @@ function Testimonials() {
         <SectionHeader eyebrow="اعضا" title="مورد علاقه کسانی که واقعاً کار تحویل می‌دن." />
         <div className="mt-14 grid gap-5 md:grid-cols-3">
           {items.map((t) => (
-            <figure key={t.name} className="flex h-full flex-col rounded-2xl border border-hairline bg-card p-6">
+            <figure
+              key={t.name}
+              className="flex h-full flex-col rounded-2xl border border-hairline bg-card p-6"
+            >
               <div className="flex items-center gap-1 text-primary">
                 {Array.from({ length: 5 }).map((_, i) => (
                   <Star key={i} className="h-3.5 w-3.5 fill-current" />
@@ -456,7 +520,10 @@ function Testimonials() {
               </blockquote>
               <figcaption className="mt-6 flex items-center gap-3">
                 <div className="grid h-9 w-9 place-items-center rounded-full bg-primary/10 text-[12px] font-semibold text-primary">
-                  {t.name.split(" ").map((s) => s[0]).join("")}
+                  {t.name
+                    .split(" ")
+                    .map((s) => s[0])
+                    .join("")}
                 </div>
                 <div>
                   <div className="text-[13px] font-medium">{t.name}</div>
@@ -475,17 +542,36 @@ function Testimonials() {
 
 function FAQ() {
   const faqs = [
-    { q: "چطور میز رزرو کنم؟", a: "وارد شو، تاریخ، ساعت و صندلی رو از نقشه لحظه‌ای انتخاب کن و آنلاین پرداخت کن. رزروت بلافاصله تأیید می‌شه." },
-    { q: "درب هوشمند چطور کار می‌کنه؟", a: "در بازه زمانی رزروت، دکمه «باز کردن درب» توی داشبوردت فعال می‌شه. با یک لمس درب باز می‌شه — بدون نیاز به کارت." },
-    { q: "می‌تونم رزروم رو تمدید کنم؟", a: "بله. ۱۵ دقیقه قبل از پایان زمان، یه اعلان می‌فرستیم. اگه صندلی خالی باشه، با یک لمس تمدیدش کن." },
-    { q: "نیاز به نصب اپلیکیشن دارم؟", a: "نه. آغاز کاملاً توی مرورگر اجرا می‌شه — حتی درب هوشمند و پرداخت." },
-    { q: "تفاوت پلن ساعتی، روزانه و ماهانه چیه؟", a: "پلن ساعتی برای استفاده‌های کوتاه، پلن روزانه با تعرفه ثابت برای یک روز کامل، و اشتراک ماهانه برای دسترسی نامحدود در ساعات کاری مناسبه." },
+    {
+      q: "چطور میز رزرو کنم؟",
+      a: "وارد شو، تاریخ، ساعت و صندلی رو از نقشه لحظه‌ای انتخاب کن و آنلاین پرداخت کن. رزروت بلافاصله تأیید می‌شه.",
+    },
+    {
+      q: "درب هوشمند چطور کار می‌کنه؟",
+      a: "در بازه زمانی رزروت، دکمه «باز کردن درب» توی داشبوردت فعال می‌شه. با یک لمس درب باز می‌شه — بدون نیاز به کارت.",
+    },
+    {
+      q: "می‌تونم رزروم رو تمدید کنم؟",
+      a: "بله. ۱۵ دقیقه قبل از پایان زمان، یه اعلان می‌فرستیم. اگه صندلی خالی باشه، با یک لمس تمدیدش کن.",
+    },
+    {
+      q: "نیاز به نصب اپلیکیشن دارم؟",
+      a: "نه. آغاز کاملاً توی مرورگر اجرا می‌شه — حتی درب هوشمند و پرداخت.",
+    },
+    {
+      q: "تفاوت پلن ساعتی، روزانه و ماهانه چیه؟",
+      a: "پلن ساعتی برای استفاده‌های کوتاه، پلن روزانه با تعرفه ثابت برای یک روز کامل، و اشتراک ماهانه برای دسترسی نامحدود در ساعات کاری مناسبه.",
+    },
   ];
   return (
     <section id="faq" className="border-b border-hairline py-24 md:py-32">
       <div className="mx-auto max-w-3xl px-6">
         <SectionHeader eyebrow="سوالات متداول" title="هر چیزی که ممکنه بپرسی." />
-        <Accordion type="single" collapsible className="mt-10 divide-y divide-hairline rounded-2xl border border-hairline bg-card">
+        <Accordion
+          type="single"
+          collapsible
+          className="mt-10 divide-y divide-hairline rounded-2xl border border-hairline bg-card"
+        >
           {faqs.map((f, i) => (
             <AccordionItem key={i} value={`i-${i}`} className="border-0 px-5">
               <AccordionTrigger className="py-5 text-right text-[15px] font-medium hover:no-underline [&>svg]:hidden group">
@@ -517,7 +603,9 @@ function CTA() {
       <div className="absolute inset-0 grid-bg" />
       <div className="relative mx-auto max-w-4xl px-6 text-center">
         <h2 className="text-balance text-4xl font-semibold tracking-tight md:text-6xl">
-          میز کار بعدی‌ات<br />با یک لمس رزرو می‌شه.
+          میز کار بعدی‌ات
+          <br />
+          با یک لمس رزرو می‌شه.
         </h2>
         <p className="mx-auto mt-5 max-w-xl text-[15px] leading-relaxed text-muted-foreground">
           به آغاز بپیوند و کار اشتراکی رو همون‌طوری تجربه کن که باید باشه — هوشمند، آروم و بی‌دردسر.
@@ -527,7 +615,12 @@ function CTA() {
             انتخاب میز
             <ArrowLeft className="mr-1 h-4 w-4" />
           </Button>
-          <Button size="lg" variant="outline" asChild className="h-12 rounded-full border-hairline bg-background/70 px-6 backdrop-blur">
+          <Button
+            size="lg"
+            variant="outline"
+            asChild
+            className="h-12 rounded-full border-hairline bg-background/70 px-6 backdrop-blur"
+          >
             <a href={SITE_CONTACT_MAILTO}>صحبت با ما</a>
           </Button>
         </div>
@@ -554,8 +647,14 @@ function SectionHeader({
       {eyebrow && (
         <div className="text-[11px] font-medium tracking-[0.2em] text-primary">{eyebrow}</div>
       )}
-      <h2 className="mt-3 text-balance text-4xl font-semibold tracking-tight md:text-5xl">{title}</h2>
-      {subtitle && <p className="mt-4 text-balance text-[15px] leading-relaxed text-muted-foreground">{subtitle}</p>}
+      <h2 className="mt-3 text-balance text-4xl font-semibold tracking-tight md:text-5xl">
+        {title}
+      </h2>
+      {subtitle && (
+        <p className="mt-4 text-balance text-[15px] leading-relaxed text-muted-foreground">
+          {subtitle}
+        </p>
+      )}
     </div>
   );
 }
