@@ -18,7 +18,6 @@ import {
 import { toman, toFa, faJalaliDate } from "@/lib/fa-format";
 
 import { DESK_DISPLAY_META, PLAN_DESK_LABELS } from "@/components/site/desk-display-meta";
-import { DeskTimelineView } from "@/components/site/desk-timeline-view";
 import { cn } from "@/lib/utils";
 import { format } from "date-fns";
 
@@ -51,7 +50,6 @@ export function LiveDeskMap() {
   const [selected, setSelected] = useState<PublicDesk | null>(null);
 
   const [planType, setPlanType] = useState<BookingType>(preferredType ?? "hourly");
-  const [view, setView] = useState<"grid">("grid");
 
   const [showCustomTime, setShowCustomTime] = useState(false);
   const [customDate, setCustomDate] = useState<Date | undefined>(() => {
@@ -210,26 +208,6 @@ export function LiveDeskMap() {
                       )}
                     >
                       {TIER_LABELS[t]}
-                    </button>
-                  );
-                })}
-              </div>
-              <div className="flex rounded-full border border-hairline bg-background p-1">
-                {([{ id: "grid", label: "شبکه‌ای" }] as const).map((v) => {
-                  const active = v.id === view;
-                  return (
-                    <button
-                      key={v.id}
-                      type="button"
-                      onClick={() => setView(v.id)}
-                      className={cn(
-                        "rounded-full px-3 py-2 text-[12.5px] transition",
-                        active
-                          ? "bg-foreground/10 text-foreground"
-                          : "text-muted-foreground hover:bg-surface",
-                      )}
-                    >
-                      {v.label}
                     </button>
                   );
                 })}
