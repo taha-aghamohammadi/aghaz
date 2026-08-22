@@ -96,22 +96,28 @@ export function computeBookingWindow(input: {
   if (bookingType === "daily") {
     const duration = input.duration ?? 1;
     const startAt = iranDateTime(dateStr, BUSINESS_HOUR_START);
-    assertFutureStart(startAt);
     const lastDay = format(addDays(parseDateOnly(dateStr), duration - 1), "yyyy-MM-dd");
     const endAt = iranDateTime(lastDay, BUSINESS_HOUR_END);
+    assertFutureEnd(endAt);
     return { startAt, endAt, units: duration };
   }
 
   const months = input.months ?? 1;
   const startAt = iranDateTime(dateStr, BUSINESS_HOUR_START);
-  assertFutureStart(startAt);
   const endAt = addMonths(new Date(startAt), months).toISOString();
+  assertFutureEnd(endAt);
   return { startAt, endAt, units: months };
 }
 
 function assertFutureStart(startAt: string): void {
   if (new Date(startAt).getTime() <= Date.now()) {
     throw new Error("زمان شروع رزرو باید در آینده باشد.");
+  }
+}
+
+function assertFutureEnd(endAt: string): void {
+  if (new Date(endAt).getTime() <= Date.now()) {
+    throw new Error("زمان رزرو به پایان رسیده است.");
   }
 }
 

@@ -138,31 +138,7 @@ function DeskLegend({ color, label }: { color: string; label: string }) {
   );
 }
 
-function FilterChip({
-  active,
-  onClick,
-  children,
-}: {
-  active: boolean;
-  onClick: () => void;
-  children: React.ReactNode;
-}) {
-  return (
-    <button
-      type="button"
-      aria-pressed={active}
-      onClick={onClick}
-      className={cn(
-        "rounded-full border px-3 py-1 text-[11.5px] transition",
-        active
-          ? "border-primary/60 bg-primary/10 text-primary"
-          : "border-hairline bg-card text-muted-foreground hover:bg-surface",
-      )}
-    >
-      {children}
-    </button>
-  );
-}
+
 
 export function BookingProvider({ children }: { children: React.ReactNode }) {
   const navigate = useNavigate();
@@ -177,6 +153,7 @@ export function BookingProvider({ children }: { children: React.ReactNode }) {
   const [desksLoading, setDesksLoading] = useState(false);
   const [type, setType] = useState<BookingType>("hourly");
   const [date, setDate] = useState<Date | undefined>(new Date());
+  const [dateEdit, setDateEdit] = useState(false);
   const [startHour, setStartHour] = useState(9);
   const [duration, setDuration] = useState(2);
   const [months, setMonths] = useState(1);
@@ -192,8 +169,7 @@ export function BookingProvider({ children }: { children: React.ReactNode }) {
   const [submitError, setSubmitError] = useState("");
   const errorRef = React.useRef<HTMLDivElement>(null);
 
-  const [zoneFilter, setZoneFilter] = useState("");
-  const [featureFilter, setFeatureFilter] = useState("");
+
 
   useEffect(() => {
     let active = true;
@@ -268,6 +244,7 @@ export function BookingProvider({ children }: { children: React.ReactNode }) {
         setType(options?.type ?? "hourly");
       }
       setDate(options?.date ?? new Date());
+      setDateEdit(false);
       setReceipt(null);
       setPaymentDone(false);
       setCardFile(null);
@@ -357,23 +334,7 @@ export function BookingProvider({ children }: { children: React.ReactNode }) {
 
   const endHour = Math.min(BUSINESS_HOUR_END, startHour + duration);
 
-  const allZones = useMemo(
-    () => Array.from(new Set(availableDesks.map((d) => d.zone).filter(Boolean))).sort(),
-    [availableDesks],
-  );
-  const allFeatures = useMemo(
-    () => Array.from(new Set(availableDesks.flatMap((d) => d.features))).sort(),
-    [availableDesks],
-  );
-  const filteredDesks = useMemo(
-    () =>
-      availableDesks.filter(
-        (d) =>
-          (!zoneFilter || d.zone === zoneFilter) &&
-          (!featureFilter || d.features.includes(featureFilter)),
-      ),
-    [availableDesks, zoneFilter, featureFilter],
-  );
+  const filteredDesks = availableDesks;
 
   const labelsMode: DeskAvailabilityMode = "window";
 
@@ -386,7 +347,7 @@ export function BookingProvider({ children }: { children: React.ReactNode }) {
       !desksLoading && availableDesks.some((d) => d.id === sd.id && d.displayStatus !== "free"),
   );
 
-  const tehranNow = useMemo(() => {
+  const tehranNow = (() => {
     const parts = new Intl.DateTimeFormat("en-CA", {
       timeZone: "Asia/Tehran",
       year: "numeric",
@@ -397,7 +358,7 @@ export function BookingProvider({ children }: { children: React.ReactNode }) {
     }).formatToParts(new Date());
     const get = (t: string) => parts.find((p) => p.type === t)?.value ?? "0";
     return { dateStr: `${get("year")}-${get("month")}-${get("day")}`, hour: Number(get("hour")) };
-  }, []);
+  })();
 
   const dateIsToday = !!date && format(date, "yyyy-MM-dd") === tehranNow.dateStr;
   const minStartHour = dateIsToday
@@ -406,6 +367,12 @@ export function BookingProvider({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     if (!dateIsToday) return;
+    if (type !== "hourly" && tehranNow.hour >= BUSINESS_HOUR_END) {
+      const next = new Date(date);
+      next.setDate(next.getDate() + 1);
+      setDate(next);
+      return;
+    }
     if (minStartHour >= BUSINESS_HOUR_END) {
       const next = new Date(date);
       next.setDate(next.getDate() + 1);
@@ -413,7 +380,12 @@ export function BookingProvider({ children }: { children: React.ReactNode }) {
       return;
     }
     if (startHour < minStartHour) setStartHour(minStartHour);
-  }, [dateIsToday, minStartHour, startHour, date]);
+  }, [dateIsToday, minStartHour, startHour, date, type, tehranNow.hour]);
+
+  useEffect(() => {
+    if (type === "daily" && duration !== 1) setDuration(1);
+    if (type === "monthly" && months !== 1) setMonths(1);
+  }, [type, duration, months]);
 
   useEffect(() => {
     const maxDuration = Math.min(12, BUSINESS_HOUR_END - startHour);
@@ -425,29 +397,16 @@ export function BookingProvider({ children }: { children: React.ReactNode }) {
       <div className="text-[11px] font-medium tracking-widest text-muted-foreground">
         انتخاب میز
       </div>
+      <p role="note" className="mt-1.5 text-[12px] leading-relaxed text-muted-foreground">
+        فقط میزهای آزاد در این بازه نمایش داده می‌شوند — می‌توانید میز را تغییر دهید یا چند میز اضافه کنید (تا {toFa(pricing.maxDesksPerBooking)} میز).
+      </p>
       <div className="mt-2 flex flex-wrap gap-3">
         <DeskLegend color="bg-success" label={DESK_LABELS[labelsMode].free} />
         <DeskLegend color="bg-warning" label={DESK_LABELS[labelsMode].held} />
         <DeskLegend color="bg-destructive" label={DESK_LABELS[labelsMode].busy} />
         <DeskLegend color="bg-blue-500" label={DESK_LABELS[labelsMode].selected} />
       </div>
-      {(allZones.length > 0 || allFeatures.length > 0) && (
-        <div className="mt-3 flex flex-wrap items-center gap-1.5">
-          <FilterChip active={!zoneFilter} onClick={() => setZoneFilter("")}>
-            همه‌ی میزها
-          </FilterChip>
-          {allZones.map((z) => (
-            <FilterChip key={z} active={zoneFilter === z} onClick={() => setZoneFilter(z)}>
-              {z}
-            </FilterChip>
-          ))}
-          {allFeatures.map((f) => (
-            <FilterChip key={f} active={featureFilter === f} onClick={() => setFeatureFilter(f)}>
-              {f}
-            </FilterChip>
-          ))}
-        </div>
-      )}
+
       {desksLoading ? (
         <div className="flex items-center justify-center gap-2 py-10 text-[13px] text-muted-foreground">
           <Loader2 className="h-4 w-4 animate-spin" />
@@ -455,7 +414,7 @@ export function BookingProvider({ children }: { children: React.ReactNode }) {
         </div>
       ) : filteredDesks.length === 0 ? (
         <p className="py-10 text-center text-[13px] text-muted-foreground">
-          میزی مطابق فیلتر پیدا نشد.
+          در این بازه میز آزادی وجود ندارد.
         </p>
       ) : (
         <div
@@ -571,86 +530,63 @@ export function BookingProvider({ children }: { children: React.ReactNode }) {
           );
         })}
       </div>
-      <div className="mt-3 flex flex-wrap gap-1.5">
-        {[
-          {
-            label: "۲ ساعت",
-            type: "hourly" as const,
-            duration: 2,
-            suffix: "۱۸۰ هزار",
-            startHour: minStartHour,
-          },
-          {
-            label: "۴ ساعت",
-            type: "hourly" as const,
-            duration: 4,
-            suffix: "۳۶۰ هزار",
-            startHour: minStartHour,
-          },
-          { label: "روز کامل", type: "daily" as const, duration: 1, suffix: "۵۹۰ هزار" },
-          { label: "۳ روز", type: "daily" as const, duration: 3, suffix: "۱٫۷ میلیون" },
-        ].map((p) => {
-          const active =
-            (p.type === "hourly" && type === "hourly" && duration === p.duration) ||
-            (p.type === "daily" && type === "daily" && duration === p.duration);
-          return (
-            <button
-              key={p.label}
-              type="button"
-              aria-pressed={active}
-              onClick={() => {
-                setType(p.type);
-                if (p.type === "hourly") {
-                  setStartHour(p.startHour);
-                  setDuration(p.duration);
-                } else {
-                  setDuration(p.duration);
-                }
-              }}
+
+      <div className="mt-6 flex items-center justify-between gap-2">
+        <div className="text-[11px] font-medium tracking-widest text-muted-foreground">
+          {type === "monthly" ? "تاریخ شروع اشتراک" : "تاریخ رزرو"}
+        </div>
+        {!dateEdit && (
+          <button
+            type="button"
+            onClick={() => setDateEdit(true)}
+            className="h-7 rounded-full border border-hairline bg-card px-3 text-[11px] text-muted-foreground hover:bg-surface"
+          >
+            تغییر
+          </button>
+        )}
+      </div>
+      {!dateEdit ? (
+        <div className="mt-2 flex items-center gap-2 rounded-xl border border-hairline bg-surface/40 px-3 py-2.5 text-[13px]">
+          <CalendarIcon className="h-3.5 w-3.5 text-muted-foreground" />
+          <span>{date ? faJalaliDate(date) : "—"}</span>
+          <span id="date-hint" className="sr-only">
+            برای تغییر تاریخ روی تغییر بزنید
+          </span>
+        </div>
+      ) : (
+        <Popover open={dateEdit} onOpenChange={setDateEdit}>
+          <PopoverTrigger asChild>
+            <Button
+              variant="outline"
+              aria-describedby="date-hint"
               className={cn(
-                "h-11 rounded-full border px-4 text-[12px] transition",
-                active
-                  ? "border-primary/60 bg-primary/10 text-primary"
-                  : "border-hairline bg-card text-muted-foreground hover:bg-surface",
+                "mt-2 h-11 w-full justify-start rounded-xl border-hairline text-right font-normal",
+                !date && "text-muted-foreground",
               )}
             >
-              {p.label} · {p.suffix}
-            </button>
-          );
-        })}
-      </div>
-
-      <div className="mt-6 text-[11px] font-medium tracking-widest text-muted-foreground">
-        {type === "monthly" ? "تاریخ شروع اشتراک" : "تاریخ رزرو"}
-      </div>
-      <Popover>
-        <PopoverTrigger asChild>
-          <Button
-            variant="outline"
-            className={cn(
-              "mt-2 h-11 w-full justify-start rounded-xl border-hairline text-right font-normal",
-              !date && "text-muted-foreground",
-            )}
-          >
-            <CalendarIcon className="ml-2 h-4 w-4" />
-            {date ? faJalaliDate(date) : "تاریخ رو انتخاب کن"}
-          </Button>
-        </PopoverTrigger>
-        <PopoverContent className="w-auto p-0" align="start">
-          <PersianCalendar
-            mode="single"
-            selected={date}
-            onSelect={setDate}
-            disabled={(d) => {
-              const today = new Date();
-              today.setHours(0, 0, 0, 0);
-              return d < today;
-            }}
-            initialFocus
-            className={cn("p-3 pointer-events-auto")}
-          />
-        </PopoverContent>
-      </Popover>
+              <CalendarIcon className="ml-2 h-4 w-4" />
+              {date ? faJalaliDate(date) : "تاریخ رو انتخاب کن"}
+            </Button>
+          </PopoverTrigger>
+          <PopoverContent className="w-auto p-0" align="start">
+            <PersianCalendar
+              mode="single"
+              selected={date}
+              onSelect={(d) => {
+                if (d) setDate(d);
+                setDateEdit(false);
+              }}
+              disabled={(d) => {
+                const today = new Date();
+                today.setHours(0, 0, 0, 0);
+                return d < today;
+              }}
+              initialFocus
+              className={cn("p-3 pointer-events-auto")}
+            />
+          </PopoverContent>
+        </Popover>
+      )}
 
       {type === "hourly" && (
         <>
@@ -718,29 +654,7 @@ export function BookingProvider({ children }: { children: React.ReactNode }) {
         </>
       )}
 
-      {type === "daily" && (
-        <Stepper
-          className="mt-6"
-          label="تعداد روز"
-          value={duration}
-          min={1}
-          max={30}
-          onChange={setDuration}
-          suffix="روز"
-        />
-      )}
 
-      {type === "monthly" && (
-        <Stepper
-          className="mt-6"
-          label="مدت اشتراک"
-          value={months}
-          min={1}
-          max={12}
-          onChange={setMonths}
-          suffix="ماه"
-        />
-      )}
     </>
   );
 
@@ -906,6 +820,7 @@ export function BookingProvider({ children }: { children: React.ReactNode }) {
         onOpenChange={(next) => {
           setOpen(next);
           if (!next) {
+            setDateEdit(false);
             requestAnimationFrame(() => {
               const firstDesk = document.querySelector<HTMLElement>("#desks [role='list'] button");
               firstDesk?.focus();
