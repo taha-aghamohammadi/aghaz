@@ -4,17 +4,7 @@ import { useNavigate } from "@tanstack/react-router";
 import { useServerFn } from "@tanstack/react-start";
 import { supabase } from "@/integrations/supabase/client";
 import { format } from "date-fns";
-import {
-  ArrowLeft,
-  CalendarIcon,
-  Check,
-  CheckCircle2,
-  Clock,
-  Copy,
-  Loader2,
-  Minus,
-  Plus,
-} from "lucide-react";
+import { ArrowLeft, CalendarIcon, Check, CheckCircle2, Copy, Loader2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -154,8 +144,8 @@ export function BookingProvider({ children }: { children: React.ReactNode }) {
   const [type, setType] = useState<BookingType>("hourly");
   const [date, setDate] = useState<Date | undefined>(new Date());
   const [dateEdit, setDateEdit] = useState(false);
-  const [startHour, setStartHour] = useState(9);
-  const [duration, setDuration] = useState(2);
+  const [startHour, setStartHour] = useState<number | null>(9);
+  const [endHour, setEndHour] = useState<number | null>(11);
   const [months, setMonths] = useState(1);
   const [receipt, setReceipt] = useState<Receipt | null>(null);
   const [confirming, setConfirming] = useState(false);
@@ -215,7 +205,7 @@ export function BookingProvider({ children }: { children: React.ReactNode }) {
       setType(pending.type);
       setDate(new Date(pending.dateStr + "T12:00:00"));
       setStartHour(pending.startHour);
-      setDuration(pending.duration);
+      setEndHour(pending.startHour + pending.duration);
       setMonths(pending.months);
       setReceipt(null);
       setOpen(true);
@@ -245,6 +235,8 @@ export function BookingProvider({ children }: { children: React.ReactNode }) {
       }
       setDate(options?.date ?? new Date());
       setDateEdit(false);
+      setStartHour(9);
+      setEndHour(11);
       setReceipt(null);
       setPaymentDone(false);
       setCardFile(null);
@@ -255,16 +247,18 @@ export function BookingProvider({ children }: { children: React.ReactNode }) {
     [preferredType],
   );
 
+  const duration = startHour !== null && endHour !== null ? endHour - startHour : 0;
   const bookingWindow = useMemo(() => {
     if (!date) return null;
+    if (type === "hourly" && (startHour === null || endHour === null)) return null;
     return tryBuildWindow({
       bookingType: type,
       dateStr: format(date, "yyyy-MM-dd"),
-      startHour: type === "hourly" ? startHour : undefined,
-      duration: type !== "monthly" ? duration : undefined,
+      startHour: type === "hourly" ? (startHour ?? undefined) : undefined,
+      duration: type !== "monthly" ? (type === "hourly" ? (duration || undefined) : 1) : undefined,
       months: type === "monthly" ? months : undefined,
     });
-  }, [type, date, startHour, duration, months]);
+  }, [type, date, startHour, endHour, duration, months]);
 
   useEffect(() => {
     if (!open || receipt) return;
@@ -298,11 +292,22 @@ export function BookingProvider({ children }: { children: React.ReactNode }) {
         clearTimeout(t);
       };
     }
+    // fallback: fetch for the selected date's business day (08-20) instead of UTC today
+    if (date) {
+      const ds = format(date, "yyyy-MM-dd");
+      const fallbackStart = iranDateTime(ds, BUSINESS_HOUR_START);
+      const fallbackEnd = iranDateTime(ds, BUSINESS_HOUR_END);
+      const t = setTimeout(() => void load({ windowStart: fallbackStart, windowEnd: fallbackEnd }), 300);
+      return () => {
+        active = false;
+        clearTimeout(t);
+      };
+    }
     void load({});
     return () => {
       active = false;
     };
-  }, [open, selectedDesks.length, receipt, fetchDesks, bookingWindow]);
+  }, [open, receipt, fetchDesks, bookingWindow, date]);
 
   const ctx = useMemo(
     () => ({ open: openFn, preferredType, prepareTier }),
@@ -312,7 +317,7 @@ export function BookingProvider({ children }: { children: React.ReactNode }) {
   const current = typeMeta(pricing, type);
   const units = useMemo(() => {
     if (type === "hourly") return duration;
-    if (type === "daily") return duration;
+    if (type === "daily") return 1;
     return months;
   }, [type, duration, months]);
 
@@ -331,8 +336,6 @@ export function BookingProvider({ children }: { children: React.ReactNode }) {
       return [...prev, desk];
     });
   }, []);
-
-  const endHour = Math.min(BUSINESS_HOUR_END, startHour + duration);
 
   const filteredDesks = availableDesks;
 
@@ -379,18 +382,25 @@ export function BookingProvider({ children }: { children: React.ReactNode }) {
       setDate(next);
       return;
     }
-    if (startHour < minStartHour) setStartHour(minStartHour);
-  }, [dateIsToday, minStartHour, startHour, date, type, tehranNow.hour]);
+    if (startHour !== null && startHour < minStartHour) {
+      const newStart = minStartHour;
+      const curEnd = endHour ?? Math.min(BUSINESS_HOUR_END, newStart + 1);
+      const newEnd = Math.max(curEnd, newStart + 1);
+      setStartHour(newStart);
+      setEndHour(Math.min(newEnd, BUSINESS_HOUR_END));
+    }
+  }, [dateIsToday, minStartHour, startHour, endHour, date, type, tehranNow.hour]);
 
   useEffect(() => {
-    if (type === "daily" && duration !== 1) setDuration(1);
     if (type === "monthly" && months !== 1) setMonths(1);
-  }, [type, duration, months]);
+  }, [type, months]);
 
   useEffect(() => {
+    if (startHour === null || endHour === null) return;
     const maxDuration = Math.min(12, BUSINESS_HOUR_END - startHour);
-    if (duration > maxDuration) setDuration(maxDuration);
-  }, [startHour, duration]);
+    if (duration > maxDuration) setEndHour(startHour + maxDuration);
+    if (duration < 1) setEndHour(startHour + 1);
+  }, [startHour, endHour, duration]);
 
   const deskGrid = (
     <div>
@@ -591,66 +601,118 @@ export function BookingProvider({ children }: { children: React.ReactNode }) {
       {type === "hourly" && (
         <>
           <div className="mt-6 text-[11px] font-medium tracking-widest text-muted-foreground">
-            ساعت شروع
+            بازه‌ی زمانی
           </div>
+          {/* grid-range + deselect: tap to set, tap selected to clear */}
           <div
-            className="mt-2 grid grid-cols-5 gap-1.5 sm:grid-cols-7"
+            className="mt-2 grid grid-cols-6 gap-1.5 sm:grid-cols-7"
             dir="ltr"
             role="group"
-            aria-label="ساعت شروع"
+            aria-label="بازه زمانی"
           >
-            {HOURS.map((h) => {
-              const active = h === startHour;
+            {[...HOURS, BUSINESS_HOUR_END].map((h) => {
               const isPast = dateIsToday && h < minStartHour;
+              const inRange = startHour !== null && endHour !== null && h >= startHour && h < endHour;
+              const isStart = h === startHour;
+              const isEnd = h === endHour;
+              const handleGridClick = () => {
+                if (isPast) return;
+                if (h === startHour) {
+                  setStartHour(null);
+                  return;
+                }
+                if (h === endHour) {
+                  setEndHour(null);
+                  return;
+                }
+                if (startHour === null && endHour === null) {
+                  setStartHour(h);
+                  setEndHour(Math.min(h + 1, BUSINESS_HOUR_END));
+                  return;
+                }
+                if (startHour === null) {
+                  if (h < (endHour as number)) setStartHour(h);
+                  else {
+                    setStartHour(h);
+                    setEndHour(Math.min(h + 1, BUSINESS_HOUR_END));
+                  }
+                  return;
+                }
+                if (endHour === null) {
+                  if (h > (startHour as number)) setEndHour(h);
+                  else {
+                    const oldStart = startHour as number;
+                    setStartHour(h);
+                    setEndHour(oldStart);
+                  }
+                  return;
+                }
+                // both set — before start acts as new interval [h, oldStart]
+                if (h < (startHour as number)) {
+                  const oldStart = startHour as number;
+                  setStartHour(h);
+                  setEndHour(oldStart);
+                } else setEndHour(h);
+              };
               return (
                 <button
                   key={h}
                   type="button"
                   disabled={isPast}
-                  aria-pressed={active}
-                  onClick={() => setStartHour(h)}
+                  aria-pressed={inRange}
+                  aria-label={
+                    isStart
+                      ? `شروع ${toFa(h)}:۰۰ — برای حذف بزن`
+                      : isEnd
+                        ? `پایان ${toFa(h)}:۰۰ — برای حذف بزن`
+                        : `${toFa(h)}:۰۰`
+                  }
+                  onClick={handleGridClick}
                   className={cn(
-                    "rounded-lg border px-2 py-2.5 text-[12px] transition",
-                    active
-                      ? "border-primary/60 bg-primary text-primary-foreground"
-                      : isPast
-                        ? "cursor-not-allowed border-hairline bg-card text-muted-foreground/40"
-                        : "border-hairline bg-card hover:bg-surface",
+                    "relative rounded-lg border px-1 py-2 text-[11px] transition min-h-[40px]",
+                    isPast && "cursor-not-allowed border-hairline bg-card text-muted-foreground/30",
+                    !isPast && isStart && "border-primary bg-primary text-primary-foreground font-semibold",
+                    !isPast && isEnd && !isStart && "border-primary bg-primary text-primary-foreground font-semibold",
+                    !isPast && !isStart && !isEnd && inRange && "border-primary/30 bg-primary/15 text-foreground",
+                    !isPast && !isStart && !isEnd && !inRange && "border-hairline bg-card hover:bg-surface text-foreground",
                   )}
                 >
                   {toFa(h)}:۰۰
+                  {isStart && (
+                    <span className="pointer-events-none absolute -bottom-1 left-1/2 h-1 w-1 -translate-x-1/2 rounded-full bg-primary-foreground" />
+                  )}
                 </button>
               );
             })}
           </div>
-
-          <Stepper
-            className="mt-5"
-            label="مدت زمان"
-            value={duration}
-            min={1}
-            max={Math.min(12, BUSINESS_HOUR_END - startHour)}
-            onChange={setDuration}
-            suffix="ساعت"
-          />
-          {type === "hourly" && duration > 6 && (
+          <p className="mt-2 flex items-center gap-2 text-[11px] text-muted-foreground">
+            <span className="inline-flex items-center gap-1">
+              <span className="h-2 w-2 rounded-full bg-primary" /> شروع
+            </span>
+            <span className="inline-flex items-center gap-1">
+              <span className="h-2 w-2 rounded-full bg-primary" /> پایان
+            </span>
+            <span className="mr-2">
+              {startHour === null && endHour === null
+                ? "— اول شروع، سپس پایان (روی انتخاب‌شده بزن تا پاک شود)"
+                : startHour === null
+                  ? "— شروع پاک شد"
+                  : endHour === null
+                    ? "— پایان پاک شد"
+                    : `— ${toFa(startHour)}:۰۰ تا ${toFa(endHour)}:۰۰ · ${toFa(duration)} ساعت`}
+            </span>
+          </p>
+          {duration > 6 && (
             <button
               type="button"
               onClick={() => {
                 setType("daily");
-                setDuration(1);
               }}
               className="mt-3 text-[12px] text-primary underline decoration-dotted underline-offset-4"
             >
               روز کامل به‌صرفه‌تره — تبدیل به روزانه؟
             </button>
           )}
-          <div className="mt-3 inline-flex items-center gap-1.5 rounded-full border border-hairline bg-surface/60 px-2.5 py-1 text-[11.5px] text-muted-foreground">
-            <Clock className="h-3 w-3" />
-            <span dir="ltr">
-              {toFa(startHour)}:۰۰ – {toFa(endHour)}:۰۰
-            </span>
-          </div>
         </>
       )}
 
@@ -667,6 +729,10 @@ export function BookingProvider({ children }: { children: React.ReactNode }) {
       toast.error("لطفاً تاریخ رزرو رو انتخاب کن");
       return;
     }
+    if (type === "hourly" && (startHour === null || endHour === null)) {
+      toast.error("بازه‌ی زمانی را کامل انتخاب کنید — شروع و پایان");
+      return;
+    }
 
     const { data: sessionData } = await supabase.auth.getSession();
     if (!sessionData.session) {
@@ -677,8 +743,8 @@ export function BookingProvider({ children }: { children: React.ReactNode }) {
           desks: selectedDesks,
           type,
           dateStr,
-          startHour,
-          duration,
+          startHour: startHour ?? 9,
+          duration: duration || 1,
           months,
         }),
       );
@@ -715,9 +781,9 @@ export function BookingProvider({ children }: { children: React.ReactNode }) {
       const dateLabel = faJalaliDate(date);
       let details = "";
       if (type === "hourly") {
-        details = `${dateLabel} · ${toFa(startHour)}:۰۰ تا ${toFa(endHour)}:۰۰`;
+        details = `${dateLabel} · ${toFa(startHour ?? 0)}:۰۰ تا ${toFa(endHour ?? 0)}:۰۰`;
       } else if (type === "daily") {
-        details = `${dateLabel} · ${toFa(duration)} روز`;
+        details = `${dateLabel} · ${toFa(1)} روز`;
       } else {
         details = `شروع ${dateLabel} · ${toFa(months)} ماه`;
       }
@@ -750,7 +816,7 @@ export function BookingProvider({ children }: { children: React.ReactNode }) {
         planLabel: current.label,
         dateLabel,
         details,
-        timeRange: type === "hourly" ? `${toFa(startHour)}:۰۰ – ${toFa(endHour)}:۰۰` : null,
+        timeRange: type === "hourly" ? `${toFa(startHour ?? 0)}:۰۰ – ${toFa(endHour ?? 0)}:۰۰` : null,
         quantity:
           type === "hourly"
             ? `${toFa(duration)} ساعت`
@@ -1125,7 +1191,7 @@ export function BookingProvider({ children }: { children: React.ReactNode }) {
                 </div>
                 <Button
                   onClick={handleConfirm}
-                  disabled={confirming || deskConflict}
+                  disabled={confirming || deskConflict || (type === "hourly" && (startHour === null || endHour === null))}
                   className="h-11 rounded-full px-6"
                 >
                   {confirming ? (
@@ -1151,49 +1217,4 @@ export function BookingProvider({ children }: { children: React.ReactNode }) {
   );
 }
 
-function Stepper({
-  label,
-  value,
-  min,
-  max,
-  onChange,
-  suffix,
-  className,
-}: {
-  label: string;
-  value: number;
-  min: number;
-  max: number;
-  onChange: (n: number) => void;
-  suffix: string;
-  className?: string;
-}) {
-  return (
-    <div className={className}>
-      <div className="text-[11px] font-medium tracking-widest text-muted-foreground">{label}</div>
-      <div className="mt-2 flex items-center gap-3">
-        <button
-          type="button"
-          aria-label="کاهش"
-          onClick={() => onChange(Math.max(min, value - 1))}
-          disabled={value <= min}
-          className="grid h-11 w-11 place-items-center rounded-full border border-hairline bg-card text-muted-foreground transition hover:bg-surface disabled:opacity-40"
-        >
-          <Minus className="h-3.5 w-3.5" />
-        </button>
-        <div className="min-w-[6.5rem] rounded-lg border border-hairline bg-background px-4 py-2 text-center text-[14px] font-medium">
-          {toFa(value)} {suffix}
-        </div>
-        <button
-          type="button"
-          aria-label="افزایش"
-          onClick={() => onChange(Math.min(max, value + 1))}
-          disabled={value >= max}
-          className="grid h-11 w-11 place-items-center rounded-full border border-hairline bg-card text-muted-foreground transition hover:bg-surface disabled:opacity-40"
-        >
-          <Plus className="h-3.5 w-3.5" />
-        </button>
-      </div>
-    </div>
-  );
-}
+
