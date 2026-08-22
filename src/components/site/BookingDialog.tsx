@@ -172,7 +172,6 @@ export function BookingProvider({ children }: { children: React.ReactNode }) {
 
   const [open, setOpen] = useState(false);
   const [selectedDesks, setSelectedDesks] = useState<PublicDesk[]>([]);
-  const [showDeskList, setShowDeskList] = useState(true);
   const [pricing, setPricing] = useState<PricingTiers>(DEFAULT_PRICING);
   const [availableDesks, setAvailableDesks] = useState<PublicDesk[]>([]);
   const [desksLoading, setDesksLoading] = useState(false);
@@ -243,7 +242,6 @@ export function BookingProvider({ children }: { children: React.ReactNode }) {
       setDuration(pending.duration);
       setMonths(pending.months);
       setReceipt(null);
-      setShowDeskList(false);
       setOpen(true);
       toast.message("ادامه رزرو", { description: "ورود موفق بود. رزرو را تأیید کنید." });
     } catch {
@@ -263,12 +261,10 @@ export function BookingProvider({ children }: { children: React.ReactNode }) {
     (options?: BookingOpenOptions) => {
       if (options?.desk) {
         setSelectedDesks([options.desk]);
-        setShowDeskList(false);
         setType(options.type ?? preferredType ?? "hourly");
         setPreferredType(null);
       } else {
         setSelectedDesks([]);
-        setShowDeskList(true);
         setType(options?.type ?? "hourly");
       }
       setDate(options?.date ?? new Date());
@@ -353,11 +349,8 @@ export function BookingProvider({ children }: { children: React.ReactNode }) {
     setSelectedDesks((prev) => {
       const idx = prev.findIndex((d) => d.id === desk.id);
       if (idx >= 0) {
-        const next = prev.filter((d) => d.id !== desk.id);
-        if (next.length === 0) setShowDeskList(true);
-        return next;
+        return prev.filter((d) => d.id !== desk.id);
       }
-      setShowDeskList(false);
       return [...prev, desk];
     });
   }, []);
@@ -924,16 +917,6 @@ export function BookingProvider({ children }: { children: React.ReactNode }) {
                   ? `${selectedDesks.length} میز انتخاب شده`
                   : "اول نوع رزرو و بازه رو انتخاب کن، بعد میزت رو ببین."}
             </DialogDescription>
-            {selectedDesks.length > 0 && !receipt && (
-              <Button
-                variant="ghost"
-                size="sm"
-                className="h-9 self-start rounded-full px-3 text-[12px] text-muted-foreground"
-                onClick={() => setShowDeskList(true)}
-              >
-                {selectedDesks.length > 1 ? "تغییر میزها" : "تغییر میز"}
-              </Button>
-            )}
           </DialogHeader>
 
           {receipt && !paymentDone ? (
@@ -1166,46 +1149,38 @@ export function BookingProvider({ children }: { children: React.ReactNode }) {
                 </Button>
               </DialogFooter>
             </>
-          ) : selectedDesks.length === 0 || showDeskList ? (
-            <div className="max-h-[70vh] overflow-y-auto px-6 py-5">
-              <div className="space-y-6">{timeControls}</div>
-              {deskGrid}
-            </div>
           ) : (
             <>
               <div className="max-h-[70vh] overflow-y-auto px-6 py-5">
                 <div className="space-y-6">{timeControls}</div>
-
-                <div className="mt-6 rounded-xl border border-hairline bg-surface/50 p-4">
-                  <div className="flex items-center justify-between text-[12.5px] text-muted-foreground">
-                    <span>میزها ({selectedDesks.length})</span>
-                    <span className="text-foreground">
-                      {selectedDesks.map((d) => d.code).join(", ")}
-                    </span>
-                  </div>
-                  <div className="mt-2 flex items-center justify-between text-[12.5px] text-muted-foreground">
-                    <span>پلن</span>
-                    <span className="text-foreground">{current?.label}</span>
-                  </div>
-                  <div className="mt-2 flex items-center justify-between text-[12.5px] text-muted-foreground">
-                    <span>{type === "monthly" ? "شروع" : "تاریخ"}</span>
-                    <span className="text-foreground">{date ? faJalaliDate(date) : "—"}</span>
-                  </div>
-                  {type === "hourly" && (
-                    <div className="mt-2 flex items-center justify-between text-[12.5px] text-muted-foreground">
-                      <span>بازه</span>
-                      <span className="text-foreground" dir="ltr">
-                        {toFa(startHour)}:۰۰ – {toFa(endHour)}:۰۰
-                      </span>
-                    </div>
-                  )}
-                  <div className="my-3 h-px bg-hairline" />
-                  <div className="flex items-center justify-between" aria-live="polite">
-                    <span className="text-[13px] font-medium">مبلغ قابل پرداخت</span>
-                    <span className="text-[15px] font-semibold">{formatToman(total)}</span>
-                  </div>
-                </div>
+                {deskGrid}
+                <span id="cap-hint" className="sr-only">
+                  حداکثر {toFa(pricing.maxDesksPerBooking)} میز قابل انتخاب است
+                </span>
               </div>
+
+              {selectedDesks.length > 0 && (
+                <div
+                  role="status"
+                  aria-live="polite"
+                  aria-atomic="true"
+                  className="flex items-center justify-between gap-4 border-t border-hairline bg-surface/60 px-6 py-3 text-[13px]"
+                >
+                  <div>
+                    <span className="font-medium">
+                      {toFa(selectedDesks.length)} میز انتخاب شده
+                    </span>
+                    {atCap && (
+                      <span className="mr-2 rounded-full border border-blue-500/30 bg-blue-500/10 px-2 py-0.5 text-[10.5px] font-medium text-blue-600 dark:text-blue-400">
+                        حداکثر
+                      </span>
+                    )}
+                  </div>
+                  <span className="font-semibold" aria-live="polite">
+                    {formatToman(total)}
+                  </span>
+                </div>
+              )}
 
               <DialogFooter className="flex-row-reverse gap-2 border-t border-hairline bg-surface/40 px-6 py-4">
                 {deskConflict && (
