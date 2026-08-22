@@ -1,25 +1,12 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { useServerFn } from "@tanstack/react-start";
-import { CalendarIcon, Clock, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
-import { PersianCalendar } from "@/components/ui/persian-calendar";
 import { useBooking, type BookingType } from "@/components/site/BookingDialog";
 import { listPublicDesks, type PublicDesk } from "@/lib/booking.functions";
-import {
-  BUSINESS_HOUR_END,
-  BUSINESS_HOUR_START,
-  DEFAULT_PRICING,
-  iranDateTime,
-  tryBuildWindow,
-  unitPriceForType,
-  type PricingTiers,
-} from "@/lib/booking.service";
-import { toman, toFa, faJalaliDate } from "@/lib/fa-format";
+import { DEFAULT_PRICING, unitPriceForType, type PricingTiers } from "@/lib/booking.service";
+import { toman, toFa } from "@/lib/fa-format";
 
-import { DESK_DISPLAY_META, PLAN_DESK_LABELS } from "@/components/site/desk-display-meta";
-import { cn } from "@/lib/utils";
-import { format } from "date-fns";
+import { DESK_DISPLAY_META, DESK_LABELS } from "@/components/site/desk-display-meta";
 
 function Legend({ color, label }: { color: string; label: string }) {
   return (
@@ -35,11 +22,6 @@ const TIER_LABELS: Record<BookingType, string> = {
   monthly: "ماهانه",
 };
 
-const HOURS = Array.from(
-  { length: BUSINESS_HOUR_END - BUSINESS_HOUR_START },
-  (_, i) => BUSINESS_HOUR_START + i,
-);
-
 export function LiveDeskMap() {
   const { open, preferredType } = useBooking();
   const fetchDesks = useServerFn(listPublicDesks);
@@ -48,48 +30,6 @@ export function LiveDeskMap() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(false);
   const [selected, setSelected] = useState<PublicDesk | null>(null);
-
-  const [planType, setPlanType] = useState<BookingType>(preferredType ?? "hourly");
-
-  const [showCustomTime, setShowCustomTime] = useState(false);
-  const [customDate, setCustomDate] = useState<Date | undefined>(() => {
-    const d = new Date();
-    d.setDate(d.getDate() + 1);
-    return d;
-  });
-  const [customStartHour, setCustomStartHour] = useState(10);
-  const [customDuration, setCustomDuration] = useState(2);
-
-  useEffect(() => {
-    if (preferredType) setPlanType(preferredType);
-  }, [preferredType]);
-
-  const hourlyWindow = useMemo(() => {
-    if (planType !== "hourly" || !showCustomTime || !customDate) return null;
-    return tryBuildWindow({
-      bookingType: "hourly",
-      dateStr: format(customDate, "yyyy-MM-dd"),
-      startHour: customStartHour,
-      duration: customDuration,
-    });
-  }, [planType, showCustomTime, customDate, customStartHour, customDuration]);
-
-  const planWindow = useMemo(() => {
-    const today = format(new Date(), "yyyy-MM-dd");
-    if (planType === "daily") {
-      return {
-        windowStart: iranDateTime(today, BUSINESS_HOUR_START),
-        windowEnd: iranDateTime(today, BUSINESS_HOUR_END),
-      };
-    }
-    if (planType === "monthly") {
-      return {
-        windowStart: iranDateTime(today, BUSINESS_HOUR_START),
-        windowEnd: new Date(new Date().setMonth(new Date().getMonth() + 1)).toISOString(),
-      };
-    }
-    return null;
-  }, [planType]);
 
   const loadWindow = useCallback(
     (params: { windowStart?: string; windowEnd?: string }) =>
@@ -106,30 +46,22 @@ export function LiveDeskMap() {
 
   const reload = useCallback(() => {
     setLoading(true);
-    const win = hourlyWindow;
-    if (win) {
-      void loadWindow({ windowStart: win.startAt, windowEnd: win.endAt });
-    } else if (planWindow) {
-      void loadWindow(planWindow);
-    } else {
-      void loadWindow({});
-    }
-  }, [hourlyWindow, planWindow, loadWindow]);
+    void loadWindow({});
+  }, [loadWindow]);
 
   useEffect(() => {
     setLoading(true);
-    const win = hourlyWindow;
-    const params = win ? { windowStart: win.startAt, windowEnd: win.endAt } : (planWindow ?? {});
-    const load = () => void loadWindow(params);
+    const load = () => void loadWindow({});
     load();
     const timer = setInterval(load, 120_000);
     return () => {
       clearInterval(timer);
     };
-  }, [hourlyWindow, planWindow, loadWindow]);
+  }, [loadWindow]);
 
   const free = desks.filter((d) => d.displayStatus !== "busy").length;
-  const labels = PLAN_DESK_LABELS[planType];
+  // ponytail: LiveDesk is now live-only; plan-specific labels live in dialog
+  const labels = DESK_LABELS.window;
   const nowIso = new Date().toISOString();
 
   const nextReservationAt = (d: PublicDesk): string | null => {
@@ -205,133 +137,6 @@ export function LiveDeskMap() {
               </div>
             </div>
 
-            <div className="flex flex-wrap items-center justify-between gap-3 border-b border-hairline bg-surface/30 px-4 py-3">
-              <div className="flex rounded-full border border-hairline bg-background p-1">
-                {(Object.keys(TIER_LABELS) as BookingType[]).map((t) => {
-                  const active = t === planType;
-                  return (
-                    <button
-                      key={t}
-                      type="button"
-                      aria-pressed={active}
-                      onClick={() => setPlanType(t)}
-                      className={cn(
-                        "rounded-full px-4 py-3 text-[12.5px] transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-1",
-                        active
-                          ? "bg-primary text-primary-foreground shadow-sm"
-                          : "text-muted-foreground hover:bg-surface",
-                      )}
-                    >
-                      {TIER_LABELS[t]}
-                    </button>
-                  );
-                })}
-              </div>
-            </div>
-
-            {planType === "hourly" && (
-              <div className="border-b border-hairline bg-surface/30 px-4 py-3">
-                {!showCustomTime ? (
-                  <button
-                    type="button"
-                    aria-expanded={showCustomTime}
-                    aria-controls="custom-time-panel"
-                    onClick={() => setShowCustomTime(true)}
-                    className="inline-flex items-center gap-2 rounded-full border border-hairline bg-card px-4 py-2.5 text-[12px] text-muted-foreground transition hover:bg-surface"
-                  >
-                    <Clock className="h-3.5 w-3.5" />
-                    زمان دلخواه
-                  </button>
-                ) : (
-                  <div id="custom-time-panel" className="flex flex-wrap items-end gap-3">
-                    <div>
-                      <div className="text-[10px] font-medium tracking-widest text-muted-foreground">
-                        تاریخ
-                      </div>
-                      <Popover>
-                        <PopoverTrigger asChild>
-                          <Button
-                            variant="outline"
-                            className="mt-1 h-11 justify-start rounded-xl border-hairline text-right font-normal text-[12.5px]"
-                          >
-                            <CalendarIcon className="ml-2 h-3.5 w-3.5" />
-                            {customDate ? faJalaliDate(customDate) : "انتخاب تاریخ"}
-                          </Button>
-                        </PopoverTrigger>
-                        <PopoverContent className="w-auto p-0" align="start">
-                          <PersianCalendar
-                            mode="single"
-                            selected={customDate}
-                            onSelect={setCustomDate}
-                            disabled={(d) => {
-                              const today = new Date();
-                              today.setHours(0, 0, 0, 0);
-                              return d < today;
-                            }}
-                            initialFocus
-                            className="p-3 pointer-events-auto"
-                          />
-                        </PopoverContent>
-                      </Popover>
-                    </div>
-                    <div>
-                      <div className="text-[10px] font-medium tracking-widest text-muted-foreground">
-                        ساعت شروع
-                      </div>
-                      <select
-                        aria-label="ساعت شروع"
-                        value={customStartHour}
-                        onChange={(e) => setCustomStartHour(Number(e.target.value))}
-                        className="mt-1 h-11 rounded-xl border border-hairline bg-card px-2 text-[12.5px]"
-                      >
-                        {HOURS.map((h) => (
-                          <option key={h} value={h}>
-                            {toFa(h)}:۰۰
-                          </option>
-                        ))}
-                      </select>
-                    </div>
-                    <div>
-                      <div className="text-[10px] font-medium tracking-widest text-muted-foreground">
-                        مدت
-                      </div>
-                      <select
-                        aria-label="مدت اجاره"
-                        value={customDuration}
-                        onChange={(e) => setCustomDuration(Number(e.target.value))}
-                        className="mt-1 h-11 rounded-xl border border-hairline bg-card px-2 text-[12.5px]"
-                      >
-                        {Array.from(
-                          { length: Math.min(6, BUSINESS_HOUR_END - customStartHour) },
-                          (_, i) => i + 1,
-                        ).map((h) => (
-                          <option key={h} value={h}>
-                            {toFa(h)} ساعت
-                          </option>
-                        ))}
-                      </select>
-                    </div>
-                    {hourlyWindow && (
-                      <div className="mb-0.5 inline-flex items-center gap-1.5 rounded-full border border-hairline bg-surface/60 px-2.5 py-1 text-[11px] text-muted-foreground">
-                        <Clock className="h-3 w-3" />
-                        <span dir="ltr">
-                          {toFa(customStartHour)}:۰۰ – {toFa(customStartHour + customDuration)}:۰۰
-                        </span>
-                      </div>
-                    )}
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      className="h-11 rounded-full px-4 text-[12px]"
-                      onClick={() => setShowCustomTime(false)}
-                    >
-                      حذف
-                    </Button>
-                  </div>
-                )}
-              </div>
-            )}
-
             <div className="bg-[radial-gradient(circle_at_1px_1px,color-mix(in_oklab,var(--foreground)_10%,transparent)_1px,transparent_0)] [background-size:22px_22px] p-4 sm:p-6">
               {error ? (
                 <div className="flex flex-col items-center gap-3 py-8 text-center">
@@ -406,8 +211,7 @@ export function LiveDeskMap() {
                         className={`h-1.5 w-1.5 rounded-full ${DESK_DISPLAY_META[selected.displayStatus].dot}`}
                       />
                       <span aria-live="polite">
-                        {labels[selected.displayStatus]} ·{" "}
-                        {toman(unitPriceForType(pricing, planType))}
+                        {labels[selected.displayStatus]} · {toman(unitPriceForType(pricing, "hourly"))}
                       </span>
                     </div>
                   </div>
@@ -416,8 +220,9 @@ export function LiveDeskMap() {
                   className="shrink-0 h-11 rounded-full px-6"
                   disabled={selected.displayStatus !== "free"}
                   onClick={() => {
+                    const type = preferredType ?? "hourly";
                     setSelected(null);
-                    open({ type: planType, desk: selected });
+                    open({ type, desk: selected });
                   }}
                 >
                   {selected.displayStatus === "free" ? "رزرو این میز" : "در دسترس نیست"}
