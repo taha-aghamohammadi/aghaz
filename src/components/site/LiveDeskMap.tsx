@@ -336,55 +336,71 @@ export function LiveDeskMap() {
               {error ? (
                 <div className="flex flex-col items-center gap-3 py-8 text-center">
                   <p className="text-[13px] text-muted-foreground">خطا در دریافت وضعیت میزها</p>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={reload}
-                    className="h-10 rounded-full px-4"
-                  >
+                  <Button variant="outline" size="sm" onClick={reload} className="h-10 rounded-full px-4">
                     دوباره تلاش کن
                   </Button>
                 </div>
               ) : loading ? (
                 <p className="py-8 text-center text-[13px] text-muted-foreground">بارگذاری نقشه…</p>
               ) : (
-                <div
-                  className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4"
-                  role="list"
-                  aria-label="لیست میزها"
-                >
-                  {desks.map((d) => {
-                    const deskMeta = DESK_DISPLAY_META[d.displayStatus];
-                    const isFree = d.displayStatus === "free";
-                    const isSelected = selected?.id === d.id;
-                    const nextAt = isFree ? nextReservationAt(d) : null;
+                <div className="flex flex-col gap-8">
+                  {[
+                    { title: "۱ · ظرفیت زنده", note: "نمای سریع سالن", layout: "grid grid-cols-2 gap-3 sm:grid-cols-3" },
+                    { title: "۲ · ماتریس وضعیت", note: "تراکم و وضعیت هر میز", layout: "grid grid-cols-3 gap-2 sm:grid-cols-4" },
+                    { title: "۳ · میزها بر اساس ناحیه", note: "برای انتخاب سریع‌تر", layout: "grid grid-cols-2 gap-3 sm:grid-cols-3" },
+                    { title: "۴ · نزدیک‌ترین رزرو", note: "ترتیب مناسب برای برنامه‌ریزی", layout: "grid grid-cols-2 gap-3 sm:grid-cols-4" },
+                  ].map((variation, index) => {
+                    const variationDesks = index === 2
+                      ? [...desks].sort((a, b) => a.zone.localeCompare(b.zone))
+                      : index === 3
+                        ? [...desks].sort((a, b) => (nextReservationAt(a) ?? "z").localeCompare(nextReservationAt(b) ?? "z"))
+                        : desks;
                     return (
-                      <button
-                        key={d.id}
-                        type="button"
-                        aria-label={`${d.name} ${d.zone} ${labels[d.displayStatus]}`}
-                        aria-pressed={isSelected}
-                        onClick={() => setSelected(d)}
-                        className={`group cursor-pointer rounded-2xl border p-3 text-right transition ${deskMeta.cell} ${
-                          isFree ? "" : "opacity-80"
-                        } ${isSelected ? "ring-2 ring-primary ring-offset-1 ring-offset-card" : ""}`}
-                      >
-                        <div className="flex items-center justify-between gap-2">
-                          <span className="text-[13.5px] font-semibold">{d.name}</span>
-                          <span className={`h-2 w-2 shrink-0 rounded-full ${deskMeta.dot}`} />
+                      <div key={variation.title} className="flex flex-col gap-3">
+                        <div className="flex items-end justify-between gap-3 border-b border-hairline pb-2">
+                          <div>
+                            <h3 className="text-[13px] font-semibold">{variation.title}</h3>
+                            <p className="mt-1 text-[11px] text-muted-foreground">{variation.note}</p>
+                          </div>
+                          <span className="rounded-full border border-hairline bg-card px-2.5 py-1 text-[10px] text-muted-foreground">
+                            {toFa(free)} آزاد
+                          </span>
                         </div>
-                        <div className="mt-1 truncate text-[11px] text-muted-foreground">
-                          {d.zone}
+                        <div className={variation.layout} role="list" aria-label={`لیست میزها، ${variation.title}`}>
+                          {variationDesks.map((d) => {
+                            const deskMeta = DESK_DISPLAY_META[d.displayStatus];
+                            const isFree = d.displayStatus === "free";
+                            const isSelected = selected?.id === d.id;
+                            const nextAt = isFree ? nextReservationAt(d) : null;
+                            return (
+                              <button
+                                key={`${index}-${d.id}`}
+                                type="button"
+                                aria-label={`${d.name} ${d.zone} ${labels[d.displayStatus]}`}
+                                aria-pressed={isSelected}
+                                onClick={() => setSelected(d)}
+                                className={cn(
+                                  "group min-h-20 cursor-pointer rounded-2xl border p-3 text-right transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary",
+                                  deskMeta.cell,
+                                  !isFree && "opacity-80",
+                                  isSelected && "ring-2 ring-primary ring-offset-1 ring-offset-card",
+                                  index === 1 && "rounded-lg p-2",
+                                )}
+                              >
+                                <div className="flex items-center justify-between gap-2">
+                                  <span className="text-[13px] font-semibold">{d.name}</span>
+                                  <span className={`h-2 w-2 shrink-0 rounded-full ${deskMeta.dot}`} />
+                                </div>
+                                <div className="mt-1 truncate text-[11px] text-muted-foreground">{d.zone}</div>
+                                <div className="mt-3 flex flex-wrap items-center gap-1.5 text-[11px] text-foreground/70">
+                                  <span>{labels[d.displayStatus]}</span>
+                                  {nextAt && <span className="rounded-full border border-warning/40 bg-warning/10 px-2 py-0.5 text-[10px]">رزرو از {toFa(new Date(nextAt).getHours())}:۰۰</span>}
+                                </div>
+                              </button>
+                            );
+                          })}
                         </div>
-                        <div className="mt-3 flex flex-wrap items-center gap-1.5 text-[11px] text-foreground/70">
-                          <span>{labels[d.displayStatus]}</span>
-                          {nextAt && (
-                            <span className="rounded-full border border-warning/40 bg-warning/10 px-2 py-0.5 text-[10.5px] font-medium text-foreground/80">
-                              رزرو از {toFa(new Date(nextAt).getHours())}:۰۰
-                            </span>
-                          )}
-                        </div>
-                      </button>
+                      </div>
                     );
                   })}
                 </div>
