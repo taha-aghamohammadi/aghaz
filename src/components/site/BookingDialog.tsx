@@ -436,6 +436,7 @@ export function BookingProvider({ children }: { children: React.ReactNode }) {
         <DeskLegend color="bg-success" label={DESK_LABELS[labelsMode].free} />
         <DeskLegend color="bg-warning" label={DESK_LABELS[labelsMode].held} />
         <DeskLegend color="bg-destructive" label={DESK_LABELS[labelsMode].busy} />
+        <DeskLegend color="bg-blue-500" label={DESK_LABELS[labelsMode].selected} />
       </div>
       {(allZones.length > 0 || allFeatures.length > 0) && (
         <div className="mt-3 flex flex-wrap items-center gap-1.5">
@@ -464,31 +465,54 @@ export function BookingProvider({ children }: { children: React.ReactNode }) {
           میزی مطابق فیلتر پیدا نشد.
         </p>
       ) : (
-        <div className="mt-3 grid gap-2 sm:grid-cols-2" role="list" aria-label="لیست میزها">
+        <div
+          className="mt-3 grid gap-2 sm:grid-cols-2"
+          role="group"
+          aria-label="لیست میزها"
+          aria-multiselectable="true"
+        >
           {filteredDesks.map((d) => {
-            const meta = DESK_DISPLAY_META[d.displayStatus];
-            const isFree = d.displayStatus === "free";
             const isSelected = selectedIds.has(d.id);
-            const disabled = !isFree || (atCap && !isSelected);
+            const meta = isSelected
+              ? DESK_DISPLAY_META.selected
+              : DESK_DISPLAY_META[d.displayStatus];
+            const isHeld = d.displayStatus === "held";
+            const isBusy = d.displayStatus === "busy";
+            const capBlocked = atCap && !isSelected;
+            const cannotSelect = isBusy || isHeld || capBlocked;
+            const selectIndex = isSelected
+              ? selectedDesks.findIndex((sd) => sd.id === d.id)
+              : -1;
+            const heldUntil = isHeld ? d.reservedIntervals[0]?.endAt : null;
+            const busyUntil = isBusy ? d.reservedIntervals[0]?.endAt : null;
             return (
               <button
                 key={d.id}
                 type="button"
-                disabled={disabled}
-                title={disabled && atCap && !isSelected ? "حداکثر ۴ میز" : undefined}
+                aria-pressed={isSelected}
+                aria-disabled={cannotSelect || undefined}
+                aria-describedby={capBlocked ? "cap-hint" : undefined}
+                title={
+                  capBlocked
+                    ? `حداکثر ${toFa(pricing.maxDesksPerBooking)} میز`
+                    : isHeld
+                      ? "در این بازه رزرو موقت دارد"
+                      : undefined
+                }
                 onClick={() => toggleDesk(d)}
                 className={cn(
-                  "rounded-xl border p-3 text-right transition",
-                  isSelected ? "border-primary/60 bg-primary/5 ring-1 ring-primary/30" : meta.cell,
-                  disabled ? "cursor-not-allowed opacity-85" : "cursor-pointer",
+                  "relative rounded-xl border p-3 text-right transition",
+                  meta.cell,
+                  isHeld && !isSelected ? "border-dashed" : "",
+                  cannotSelect ? "cursor-not-allowed opacity-75" : "cursor-pointer",
                 )}
               >
                 <div className="flex items-center justify-between gap-2">
                   <span className="text-[13.5px] font-semibold">{d.name}</span>
                   <div className="flex items-center gap-1.5">
                     {isSelected && (
-                      <span className="grid h-4 w-4 place-items-center rounded-full bg-primary text-primary-foreground">
-                        <Check className="h-2.5 w-2.5" />
+                      <span className="grid h-5 w-5 place-items-center rounded-full bg-blue-500 text-[10px] font-bold text-white">
+                        {toFa(selectIndex + 1)}
                       </span>
                     )}
                     <span className={cn("h-2.5 w-2.5 shrink-0 rounded-full", meta.dot)} />
@@ -496,10 +520,18 @@ export function BookingProvider({ children }: { children: React.ReactNode }) {
                 </div>
                 <div className="mt-1 flex items-center justify-between gap-2">
                   <span className="text-[11px] text-muted-foreground">{d.zone}</span>
-                  <span className="text-[11px] font-medium text-foreground/80">
-                    {DESK_LABELS[labelsMode][d.displayStatus]}
-                  </span>
+                  <span className="text-[11px] font-medium text-foreground/80">{meta.label}</span>
                 </div>
+                {heldUntil && (
+                  <span className="mt-1.5 inline-flex rounded-full border border-warning/40 bg-warning/10 px-2 py-0.5 text-[10.5px] font-medium text-foreground/80">
+                    تا {toFa(new Date(heldUntil).getHours())}:۰۰
+                  </span>
+                )}
+                {busyUntil && (
+                  <span className="mt-1.5 inline-flex rounded-full border border-destructive/30 bg-destructive/10 px-2 py-0.5 text-[10.5px] font-medium text-foreground/80">
+                    پر تا {toFa(new Date(busyUntil).getHours())}:۰۰
+                  </span>
+                )}
                 <div className="mt-1 text-[11px] text-muted-foreground" dir="ltr">
                   {d.code}
                 </div>
@@ -544,6 +576,42 @@ export function BookingProvider({ children }: { children: React.ReactNode }) {
                 {formatToman(t.price)}
                 <span className="text-muted-foreground"> / {t.unit}</span>
               </div>
+            </button>
+          );
+        })}
+      </div>
+      <div className="mt-3 flex flex-wrap gap-1.5">
+        {[
+          { label: "۲ ساعت", type: "hourly" as const, duration: 2, suffix: "۱۸۰ هزار", startHour: minStartHour },
+          { label: "۴ ساعت", type: "hourly" as const, duration: 4, suffix: "۳۶۰ هزار", startHour: minStartHour },
+          { label: "روز کامل", type: "daily" as const, duration: 1, suffix: "۵۹۰ هزار" },
+          { label: "۳ روز", type: "daily" as const, duration: 3, suffix: "۱٫۷ میلیون" },
+        ].map((p) => {
+          const active =
+            (p.type === "hourly" && type === "hourly" && duration === p.duration) ||
+            (p.type === "daily" && type === "daily" && duration === p.duration);
+          return (
+            <button
+              key={p.label}
+              type="button"
+              aria-pressed={active}
+              onClick={() => {
+                setType(p.type);
+                if (p.type === "hourly") {
+                  setStartHour(p.startHour);
+                  setDuration(p.duration);
+                } else {
+                  setDuration(p.duration);
+                }
+              }}
+              className={cn(
+                "h-11 rounded-full border px-4 text-[12px] transition",
+                active
+                  ? "border-primary/60 bg-primary/10 text-primary"
+                  : "border-hairline bg-card text-muted-foreground hover:bg-surface",
+              )}
+            >
+              {p.label} · {p.suffix}
             </button>
           );
         })}
@@ -626,6 +694,18 @@ export function BookingProvider({ children }: { children: React.ReactNode }) {
             onChange={setDuration}
             suffix="ساعت"
           />
+          {type === "hourly" && duration > 6 && (
+            <button
+              type="button"
+              onClick={() => {
+                setType("daily");
+                setDuration(1);
+              }}
+              className="mt-3 text-[12px] text-primary underline decoration-dotted underline-offset-4"
+            >
+              روز کامل به‌صرفه‌تره — تبدیل به روزانه؟
+            </button>
+          )}
           <div className="mt-3 inline-flex items-center gap-1.5 rounded-full border border-hairline bg-surface/60 px-2.5 py-1 text-[11.5px] text-muted-foreground">
             <Clock className="h-3 w-3" />
             <span dir="ltr">

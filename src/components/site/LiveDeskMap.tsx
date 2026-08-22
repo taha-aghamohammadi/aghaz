@@ -1,12 +1,23 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useServerFn } from "@tanstack/react-start";
+import { CalendarIcon, Clock } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { PersianCalendar } from "@/components/ui/persian-calendar";
 import { useBooking, type BookingType } from "@/components/site/BookingDialog";
 import { listPublicDesks, type PublicDesk } from "@/lib/booking.functions";
-import { DEFAULT_PRICING, unitPriceForType, type PricingTiers } from "@/lib/booking.service";
-import { toman, toFa } from "@/lib/fa-format";
+import {
+  BUSINESS_HOUR_END,
+  BUSINESS_HOUR_START,
+  DEFAULT_PRICING,
+  iranDateTime,
+  unitPriceForType,
+  type PricingTiers,
+} from "@/lib/booking.service";
+import { toman, toFa, faJalaliDate } from "@/lib/fa-format";
 
 import { DESK_DISPLAY_META, DESK_LABELS } from "@/components/site/desk-display-meta";
+import { format } from "date-fns";
 
 function Legend({ color, label }: { color: string; label: string }) {
   return (
@@ -30,6 +41,17 @@ export function LiveDeskMap() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(false);
   const [selected, setSelected] = useState<PublicDesk | null>(null);
+  const [showGlance, setShowGlance] = useState(false);
+  const [glanceDate, setGlanceDate] = useState<Date | null>(null);
+
+  const glanceWindow = useMemo(() => {
+    if (!glanceDate) return null;
+    const ds = format(glanceDate, "yyyy-MM-dd");
+    return {
+      windowStart: iranDateTime(ds, BUSINESS_HOUR_START),
+      windowEnd: iranDateTime(ds, BUSINESS_HOUR_END),
+    };
+  }, [glanceDate]);
 
   const loadWindow = useCallback(
     (params: { windowStart?: string; windowEnd?: string }) =>
@@ -46,18 +68,19 @@ export function LiveDeskMap() {
 
   const reload = useCallback(() => {
     setLoading(true);
-    void loadWindow({});
-  }, [loadWindow]);
+    void loadWindow(glanceWindow ?? {});
+  }, [loadWindow, glanceWindow]);
 
   useEffect(() => {
     setLoading(true);
-    const load = () => void loadWindow({});
+    const params = glanceWindow ?? {};
+    const load = () => void loadWindow(params);
     load();
     const timer = setInterval(load, 120_000);
     return () => {
       clearInterval(timer);
     };
-  }, [loadWindow]);
+  }, [loadWindow, glanceWindow]);
 
   const free = desks.filter((d) => d.displayStatus !== "busy").length;
   // ponytail: LiveDesk is now live-only; plan-specific labels live in dialog
@@ -108,16 +131,20 @@ export function LiveDeskMap() {
                 )}
               </span>
               <span className="text-[13px] text-muted-foreground">
-                {loading
-                  ? "در حال بارگذاری…"
-                  : error
-                    ? "وضعیت در دسترس نیست"
-                    : `میز ${labels.free} از ${toFa(desks.length)} میز`}
+                {loading ? (
+                  "در حال بارگذاری…"
+                ) : error ? (
+                  "وضعیت در دسترس نیست"
+                ) : glanceDate ? (
+                  `میز ${labels.free} در ${faJalaliDate(glanceDate)}`
+                ) : (
+                  `میز ${labels.free} از ${toFa(desks.length)} میز`
+                )}
               </span>
             </div>
             <div className="mt-6 flex flex-wrap gap-4 text-[12.5px] text-muted-foreground">
               <Legend color="bg-success" label={labels.free} />
-              <Legend color="bg-warning" label={labels.held} />
+              <Legend color="bg-warning" label="رزرو موقت" />
               <Legend color="bg-destructive" label={labels.busy} />
             </div>
             {preferredType && (
@@ -135,6 +162,66 @@ export function LiveDeskMap() {
               <div className="shrink-0 text-[11px] text-muted-foreground">
                 {loading ? "در حال به‌روزرسانی…" : "به‌روز"}
               </div>
+            </div>
+
+            <div className="flex flex-wrap items-center gap-2 border-b border-hairline bg-surface/30 px-4 py-3">
+              {!showGlance ? (
+                <button
+                  type="button"
+                  aria-expanded={showGlance}
+                  aria-controls="glance-panel"
+                  onClick={() => setShowGlance(true)}
+                  className="inline-flex items-center gap-2 rounded-full border border-hairline bg-card px-4 py-2.5 text-[12px] text-muted-foreground transition hover:bg-surface"
+                >
+                  <CalendarIcon className="h-3.5 w-3.5" />
+                  دیدن در تاریخ دیگر
+                </button>
+              ) : (
+                <div id="glance-panel" className="flex flex-wrap items-center gap-2">
+                  <Popover>
+                    <PopoverTrigger asChild>
+                      <Button
+                        variant="outline"
+                        className="h-11 justify-start rounded-xl border-hairline text-right font-normal text-[12.5px]"
+                      >
+                        <CalendarIcon className="ml-2 h-3.5 w-3.5" />
+                        {glanceDate ? faJalaliDate(glanceDate) : "انتخاب تاریخ"}
+                      </Button>
+                    </PopoverTrigger>
+                    <PopoverContent className="w-auto p-0" align="start">
+                      <PersianCalendar
+                        mode="single"
+                        selected={glanceDate ?? undefined}
+                        onSelect={(d) => setGlanceDate(d ?? null)}
+                        disabled={(d) => {
+                          const today = new Date();
+                          today.setHours(0, 0, 0, 0);
+                          return d < today;
+                        }}
+                        initialFocus
+                        className="p-3 pointer-events-auto"
+                      />
+                    </PopoverContent>
+                  </Popover>
+                  {glanceDate && (
+                    <span className="inline-flex items-center gap-1.5 rounded-full border border-hairline bg-surface/60 px-2.5 py-1 text-[11px] text-muted-foreground">
+                      <Clock className="h-3 w-3" />
+                      نمایش: {faJalaliDate(glanceDate)}
+                    </span>
+                  )}
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="h-11 rounded-full px-4 text-[12px]"
+                    onClick={() => {
+                      setGlanceDate(null);
+                      setShowGlance(false);
+                    }}
+                  >
+                    حذف
+                  </Button>
+                </div>
+              )}
             </div>
 
             <div className="bg-[radial-gradient(circle_at_1px_1px,color-mix(in_oklab,var(--foreground)_10%,transparent)_1px,transparent_0)] [background-size:22px_22px] p-4 sm:p-6">
@@ -163,16 +250,17 @@ export function LiveDeskMap() {
                     const isFree = d.displayStatus === "free";
                     const isSelected = selected?.id === d.id;
                     const nextAt = isFree ? nextReservationAt(d) : null;
+                    const heldUntil = d.displayStatus === "held" ? d.reservedIntervals[0]?.endAt : null;
                     return (
                       <button
                         key={d.id}
                         type="button"
-                        aria-label={`${d.name} ${d.zone} ${labels[d.displayStatus]}`}
+                        aria-label={`${d.name} ${d.zone} ${labels[d.displayStatus]}${heldUntil ? ` تا ${new Date(heldUntil).getHours()}:۰۰` : ""}`}
                         aria-pressed={isSelected}
                         onClick={() => setSelected(d)}
                         className={`group cursor-pointer rounded-2xl border p-3 text-right transition ${deskMeta.cell} ${
-                          isFree ? "" : "opacity-80"
-                        } ${isSelected ? "ring-2 ring-primary ring-offset-1 ring-offset-card" : ""}`}
+                          d.displayStatus === "held" ? "border-dashed" : ""
+                        } ${isFree ? "" : "opacity-90"} ${isSelected ? "ring-2 ring-primary ring-offset-1 ring-offset-card" : ""}`}
                       >
                         <div className="flex items-center justify-between gap-2">
                           <span className="text-[13.5px] font-semibold">{d.name}</span>
@@ -182,7 +270,12 @@ export function LiveDeskMap() {
                           {d.zone}
                         </div>
                         <div className="mt-3 flex flex-wrap items-center gap-1.5 text-[11px] text-foreground/70">
-                          <span>{labels[d.displayStatus]}</span>
+                          <span>{d.displayStatus === "held" ? "رزرو موقت" : labels[d.displayStatus]}</span>
+                          {d.displayStatus === "held" && heldUntil && (
+                            <span className="rounded-full border border-warning/40 bg-warning/10 px-2 py-0.5 text-[10.5px] font-medium text-foreground/80">
+                              تا {toFa(new Date(heldUntil).getHours())}:۰۰
+                            </span>
+                          )}
                           {nextAt && (
                             <span className="rounded-full border border-warning/40 bg-warning/10 px-2 py-0.5 text-[10.5px] font-medium text-foreground/80">
                               رزرو از {toFa(new Date(nextAt).getHours())}:۰۰
@@ -193,6 +286,12 @@ export function LiveDeskMap() {
                     );
                   })}
                 </div>
+              )}
+              {!loading && !error && glanceDate && desks.length > 0 && free === 0 && (
+                <p className="mt-4 text-center text-[12px] text-muted-foreground">
+                  این بازه رزرو موقت دارد — ۱۰ دقیقه دیگر اگر پرداخت نشود آزاد می‌شود. زمان دیگری
+                  انتخاب کن.
+                </p>
               )}
             </div>
 
@@ -211,7 +310,8 @@ export function LiveDeskMap() {
                         className={`h-1.5 w-1.5 rounded-full ${DESK_DISPLAY_META[selected.displayStatus].dot}`}
                       />
                       <span aria-live="polite">
-                        {labels[selected.displayStatus]} · {toman(unitPriceForType(pricing, "hourly"))}
+                        {selected.displayStatus === "held" ? "رزرو موقت" : labels[selected.displayStatus]} ·{" "}
+                        {toman(unitPriceForType(pricing, "hourly"))}
                       </span>
                     </div>
                   </div>
