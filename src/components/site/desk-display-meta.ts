@@ -34,10 +34,18 @@ export const DESK_LABELS: Record<
   Record<PublicDesk["displayStatus"] | "selected", string>
 > = {
   now: { free: "آزاد", held: "رزرو موقت", busy: "پر", selected: "انتخاب شده" },
-  window: { free: "آزاد در این بازه", held: "رزرو موقت در این بازه", busy: "پر", selected: "انتخاب شده" },
+  window: {
+    free: "آزاد در این بازه",
+    held: "رزرو موقت در این بازه",
+    busy: "پر",
+    selected: "انتخاب شده",
+  },
 };
 
-export const PLAN_DESK_LABELS: Record<BookingType, Record<PublicDesk["displayStatus"] | "selected", string>> = {
+export const PLAN_DESK_LABELS: Record<
+  BookingType,
+  Record<PublicDesk["displayStatus"] | "selected", string>
+> = {
   hourly: { free: "آزاد", held: "رزرو موقت", busy: "پر", selected: "انتخاب شده" },
   daily: { free: "آزاد کل روز", held: "رزرو موقت", busy: "پر", selected: "انتخاب شده" },
   monthly: { free: "آزاد و پایدار", held: "رزرو موقت", busy: "پر", selected: "انتخاب شده" },

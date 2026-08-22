@@ -273,6 +273,7 @@ export const getPricingSettings = createServerFn({ method: "GET" })
         monthlyRate: DEFAULT_PRICING.monthlyRate,
         discountPercent: DEFAULT_PRICING.discountPercent,
         discountEndsAt: DEFAULT_PRICING.discountEndsAt,
+        maxDesksPerBooking: DEFAULT_PRICING.maxDesksPerBooking,
         cardNumber: "",
         cardHolder: "",
         updatedAt: null as string | null,

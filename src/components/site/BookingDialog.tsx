@@ -473,9 +473,7 @@ export function BookingProvider({ children }: { children: React.ReactNode }) {
             const isBusy = d.displayStatus === "busy";
             const capBlocked = atCap && !isSelected;
             const cannotSelect = isBusy || isHeld || capBlocked;
-            const selectIndex = isSelected
-              ? selectedDesks.findIndex((sd) => sd.id === d.id)
-              : -1;
+            const selectIndex = isSelected ? selectedDesks.findIndex((sd) => sd.id === d.id) : -1;
             const heldUntil = isHeld ? d.reservedIntervals[0]?.endAt : null;
             const busyUntil = isBusy ? d.reservedIntervals[0]?.endAt : null;
             return (
@@ -575,8 +573,20 @@ export function BookingProvider({ children }: { children: React.ReactNode }) {
       </div>
       <div className="mt-3 flex flex-wrap gap-1.5">
         {[
-          { label: "۲ ساعت", type: "hourly" as const, duration: 2, suffix: "۱۸۰ هزار", startHour: minStartHour },
-          { label: "۴ ساعت", type: "hourly" as const, duration: 4, suffix: "۳۶۰ هزار", startHour: minStartHour },
+          {
+            label: "۲ ساعت",
+            type: "hourly" as const,
+            duration: 2,
+            suffix: "۱۸۰ هزار",
+            startHour: minStartHour,
+          },
+          {
+            label: "۴ ساعت",
+            type: "hourly" as const,
+            duration: 4,
+            suffix: "۳۶۰ هزار",
+            startHour: minStartHour,
+          },
           { label: "روز کامل", type: "daily" as const, duration: 1, suffix: "۵۹۰ هزار" },
           { label: "۳ روز", type: "daily" as const, duration: 3, suffix: "۱٫۷ میلیون" },
         ].map((p) => {
@@ -1167,9 +1177,7 @@ export function BookingProvider({ children }: { children: React.ReactNode }) {
                   className="flex items-center justify-between gap-4 border-t border-hairline bg-surface/60 px-6 py-3 text-[13px]"
                 >
                   <div>
-                    <span className="font-medium">
-                      {toFa(selectedDesks.length)} میز انتخاب شده
-                    </span>
+                    <span className="font-medium">{toFa(selectedDesks.length)} میز انتخاب شده</span>
                     {atCap && (
                       <span className="mr-2 rounded-full border border-blue-500/30 bg-blue-500/10 px-2 py-0.5 text-[10.5px] font-medium text-blue-600 dark:text-blue-400">
                         حداکثر
