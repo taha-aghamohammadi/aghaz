@@ -34,9 +34,15 @@ export function LiveDeskMap() {
   const [error, setError] = useState(false);
   const [glanceDate, setGlanceDate] = useState<Date | null>(null);
 
+  // ponytail: Tehran date helper — local format leaks UTC near midnight
+  const tehranDateStr = (d: Date) => {
+    const parts = new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Tehran", year: "numeric", month: "2-digit", day: "2-digit" }).formatToParts(d);
+    const g = (t: string) => parts.find((p) => p.type === t)?.value ?? "0";
+    return `${g("year")}-${g("month")}-${g("day")}`;
+  };
   const glanceWindow = useMemo(() => {
     if (!glanceDate) return null;
-    const ds = format(glanceDate, "yyyy-MM-dd");
+    const ds = tehranDateStr(glanceDate);
     return {
       windowStart: iranDateTime(ds, BUSINESS_HOUR_START),
       windowEnd: iranDateTime(ds, BUSINESS_HOUR_END),
@@ -46,16 +52,16 @@ export function LiveDeskMap() {
   const timelineDate = useMemo(() => glanceDate ?? new Date(), [glanceDate]);
 
   const isTodayTimeline = useMemo(() => {
-    const todayStr = format(new Date(), "yyyy-MM-dd");
-    return format(timelineDate, "yyyy-MM-dd") === todayStr;
+    const todayStr = tehranDateStr(new Date());
+    return tehranDateStr(timelineDate) === todayStr;
   }, [timelineDate]);
 
   // ponytail: today = no glanceDate (live); back disabled when at min (today start)
   const startToday = useMemo(() => {
-    const d = new Date();
-    d.setHours(0, 0, 0, 0);
-    return d;
-  }, []);
+    // Tehran midnight value for disabled() check — recompute on glance changes (avoids stale UTC midnight)
+    const ds = tehranDateStr(new Date());
+    return new Date(`${ds}T00:00:00+03:30`);
+  }, [glanceDate]);
 
   const loadWindow = useCallback(
     (params: { windowStart?: string; windowEnd?: string }) =>
@@ -76,10 +82,10 @@ export function LiveDeskMap() {
 
   useEffect(() => {
     setLoading(true);
+    setDesks([]); // ponytail: clear stale tomorrow desks before fetching today
     const params = glanceWindow ?? {};
-    const load = () => void loadWindow(params);
-    load();
-    const timer = setInterval(load, 120_000);
+    void loadWindow(params);
+    const timer = setInterval(() => void loadWindow(glanceWindow ?? {}), 120_000);
     return () => {
       clearInterval(timer);
     };

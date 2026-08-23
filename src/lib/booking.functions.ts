@@ -43,11 +43,16 @@ export const listPublicDesks = createServerFn({ method: "GET" })
   )
   .handler(async ({ data }) => {
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
-    const now = new Date();
+    // ponytail: Tehran date, not UTC — fallback must match client iranDateTime logic
+    const tehranDateStr = (() => {
+      const parts = new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Tehran", year: "numeric", month: "2-digit", day: "2-digit" }).formatToParts(new Date());
+      const g = (t: string) => parts.find((p) => p.type === t)?.value ?? "0";
+      return `${g("year")}-${g("month")}-${g("day")}`;
+    })();
     const windowStart =
-      data.windowStart ?? iranDateTime(now.toISOString().slice(0, 10), BUSINESS_HOUR_START);
+      data.windowStart ?? iranDateTime(tehranDateStr, BUSINESS_HOUR_START);
     const windowEnd =
-      data.windowEnd ?? iranDateTime(now.toISOString().slice(0, 10), BUSINESS_HOUR_END);
+      data.windowEnd ?? iranDateTime(tehranDateStr, BUSINESS_HOUR_END);
 
     const [desksRes, bookingsRes, pricing] = await Promise.all([
       supabaseAdmin.from("desks").select("*").eq("is_active", true).order("code"),

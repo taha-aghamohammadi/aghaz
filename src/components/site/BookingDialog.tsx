@@ -251,9 +251,12 @@ export function BookingProvider({ children }: { children: React.ReactNode }) {
   const bookingWindow = useMemo(() => {
     if (!date) return null;
     if (type === "hourly" && (startHour === null || endHour === null)) return null;
+    const parts = new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Tehran", year: "numeric", month: "2-digit", day: "2-digit" }).formatToParts(date);
+    const g = (t: string) => parts.find((p) => p.type === t)?.value ?? "0";
+    const dateStr = `${g("year")}-${g("month")}-${g("day")}`;
     return tryBuildWindow({
       bookingType: type,
-      dateStr: format(date, "yyyy-MM-dd"),
+      dateStr,
       startHour: type === "hourly" ? (startHour ?? undefined) : undefined,
       duration: type !== "monthly" ? (type === "hourly" ? (duration || undefined) : 1) : undefined,
       months: type === "monthly" ? months : undefined,
@@ -292,15 +295,25 @@ export function BookingProvider({ children }: { children: React.ReactNode }) {
         clearTimeout(t);
       };
     }
-    // fallback: fetch for the selected date's business day (08-20) instead of UTC today
-    if (date) {
-      const ds = format(date, "yyyy-MM-dd");
+    // fallback: only for daily/monthly; hourly with null window (incomplete/past) shows no conflict until valid
+    if (type !== "hourly" && date) {
+      const parts = new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Tehran", year: "numeric", month: "2-digit", day: "2-digit" }).formatToParts(date);
+      const g = (t: string) => parts.find((p) => p.type === t)?.value ?? "0";
+      const ds = `${g("year")}-${g("month")}-${g("day")}`;
       const fallbackStart = iranDateTime(ds, BUSINESS_HOUR_START);
       const fallbackEnd = iranDateTime(ds, BUSINESS_HOUR_END);
       const t = setTimeout(() => void load({ windowStart: fallbackStart, windowEnd: fallbackEnd }), 300);
       return () => {
         active = false;
         clearTimeout(t);
+      };
+    }
+    if (type === "hourly" && date) {
+      // hourly incomplete — clear stale to avoid showing yesterday's occupied as today
+      setAvailableDesks([]);
+      setDesksLoading(false);
+      return () => {
+        active = false;
       };
     }
     void load({});
@@ -363,13 +376,18 @@ export function BookingProvider({ children }: { children: React.ReactNode }) {
     return { dateStr: `${get("year")}-${get("month")}-${get("day")}`, hour: Number(get("hour")) };
   })();
 
-  const dateIsToday = !!date && format(date, "yyyy-MM-dd") === tehranNow.dateStr;
+  const dateIsToday = (() => {
+    if (!date) return false;
+    const parts = new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Tehran", year: "numeric", month: "2-digit", day: "2-digit" }).formatToParts(date);
+    const g = (t: string) => parts.find((p) => p.type === t)?.value ?? "0";
+    return `${g("year")}-${g("month")}-${g("day")}` === tehranNow.dateStr;
+  })();
   const minStartHour = dateIsToday
     ? Math.max(BUSINESS_HOUR_START, tehranNow.hour + 1)
     : BUSINESS_HOUR_START;
 
   useEffect(() => {
-    if (!dateIsToday) return;
+    if (!date || !dateIsToday) return;
     if (type !== "hourly" && tehranNow.hour >= BUSINESS_HOUR_END) {
       const next = new Date(date);
       next.setDate(next.getDate() + 1);
