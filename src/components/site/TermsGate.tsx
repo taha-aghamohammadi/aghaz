@@ -24,8 +24,11 @@ export function TermsGate({ children }: { children: React.ReactNode }) {
     void getMyTermsStatus()
       .then((s) => {
         setState(s as never);
-        if (needsReconsent(s.acceptedVersion, s.terms as never)) setOpen(true);
-        else if (shouldShowBanner(s.acceptedVersion, s.terms as never)) {
+        if (!s.terms.content?.trim() || s.terms.version === 0) return;
+        if (needsReconsent(s.acceptedVersion, s.terms as never)) {
+          const dismissed = Number(localStorage.getItem("dismissedTermsVersion") ?? -1);
+          if (dismissed !== s.terms.version) setOpen(true);
+        } else if (shouldShowBanner(s.acceptedVersion, s.terms as never)) {
           const dismissed = Number(localStorage.getItem("dismissedTermsVersion") ?? -1);
           if (dismissed !== s.terms.version) setBanner(true);
         }
@@ -55,6 +58,12 @@ export function TermsGate({ children }: { children: React.ReactNode }) {
     setBanner(false);
   };
 
+  const dismissGate = () => {
+    if (!state) return;
+    localStorage.setItem("dismissedTermsVersion", String(state.terms.version));
+    setOpen(false);
+  };
+
   return (
     <>
       {banner && state && (
@@ -70,12 +79,8 @@ export function TermsGate({ children }: { children: React.ReactNode }) {
           </Button>
         </div>
       )}
-      <Dialog open={open} onOpenChange={() => {}}>
-        <DialogContent
-          onEscapeKeyDown={(e) => e.preventDefault()}
-          onInteractOutside={(e) => e.preventDefault()}
-          className="max-h-[80vh] overflow-y-auto [&>button]:hidden"
-        >
+      <Dialog open={open} onOpenChange={setOpen}>
+        <DialogContent className="max-h-[80vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>قوانین به‌روزرسانی شده</DialogTitle>
             <DialogDescription>
@@ -85,12 +90,17 @@ export function TermsGate({ children }: { children: React.ReactNode }) {
           <div className="max-h-[50vh] overflow-y-auto whitespace-pre-wrap rounded-xl border border-hairline bg-surface p-4 text-[13.5px] leading-7">
             {state?.terms.content}
           </div>
-          <Button onClick={accept} disabled={saving} className="mt-4 w-full rounded-full">
-            {saving ? "…" : "می‌پذیرم"}
-          </Button>
+          <div className="mt-4 flex gap-2">
+            <Button variant="outline" onClick={dismissGate} className="flex-1 rounded-full">
+              بعداً
+            </Button>
+            <Button onClick={accept} disabled={saving} className="flex-1 rounded-full">
+              {saving ? "…" : "می‌پذیرم"}
+            </Button>
+          </div>
         </DialogContent>
       </Dialog>
-      {open ? null : children}
+      {children}
     </>
   );
 }

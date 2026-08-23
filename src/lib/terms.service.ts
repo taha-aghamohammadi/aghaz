@@ -41,14 +41,14 @@ export async function fetchTermsSettings(client: SupabaseClient<Database>): Prom
 
 // ponytail: simple version compare, add semver/range if terms versioning gets complex
 export function needsReconsent(profileVersion: number | null, terms: TermsSettings): boolean {
-  if (!terms.content) return false;
+  if (!terms.content?.trim()) return false;
   if (!terms.requireReconsent) return false;
   if (profileVersion == null) return true;
   return profileVersion < terms.version;
 }
 
 export function shouldShowBanner(profileVersion: number | null, terms: TermsSettings): boolean {
-  if (!terms.content) return false;
+  if (!terms.content?.trim()) return false;
   if (needsReconsent(profileVersion, terms)) return false; // hard gate takes precedence
   if (profileVersion == null) return false; // gate handles never-accepted + requireReconsent
   return profileVersion < terms.version; // minor update → banner
