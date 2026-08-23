@@ -17,7 +17,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Toaster } from "@/components/ui/sonner";
 import { supabase } from "@/integrations/supabase/client";
-import { requestPhoneOtp, updateMyProfile, verifyPhoneOtp } from "@/lib/auth.functions";
+import { completeSignupAndProvision, requestPhoneOtp, verifyPhoneOtp } from "@/lib/auth.functions";
 import { OtpDemoBadge } from "@/components/site/OtpDemoBadge";
 import { isOtpDemoMode } from "@/lib/demo-mode";
 import { normalizeNationalId } from "@/lib/national-id";
@@ -81,6 +81,7 @@ function AuthPage() {
   const [termsAccepted, setTermsAccepted] = useState(false);
   const [terms, setTerms] = useState<{ content: string; version: number } | null>(null);
   const [showTerms, setShowTerms] = useState(false);
+  const [pendingToken, setPendingToken] = useState<string | null>(null);
   const codeRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -110,6 +111,7 @@ function AuthPage() {
     setSeconds(0);
     setTelegramLinked(false);
     setOtpChannel("none");
+    setPendingToken(null);
   }
 
   async function sendCode(forceChannel?: "sms" | "telegram") {
@@ -159,27 +161,27 @@ function AuthPage() {
     }
     setLoading(true);
     try {
-      const {
-        registered,
-        telegramLinked: linked,
-        emailOtp,
-        email,
-      } = await verifyPhoneOtp({
-        data: { phone, code },
-      });
-      const { error } = await supabase.auth.verifyOtp({
-        email,
-        token: emailOtp,
-        type: "magiclink",
-      });
-      if (error) throw new Error("ورود ناموفق بود. دوباره تلاش کنید.");
-      await router.invalidate();
-
-      setTelegramLinked(linked);
-      if (registered) {
+      const res = (await verifyPhoneOtp({ data: { phone, code } })) as {
+        registered: boolean;
+        telegramLinked: boolean;
+        emailOtp?: string;
+        email?: string;
+        pendingToken?: string;
+      };
+      setTelegramLinked(res.telegramLinked);
+      if (res.registered) {
+        const { error } = await supabase.auth.verifyOtp({
+          email: res.email!,
+          token: res.emailOtp!,
+          type: "magiclink",
+        });
+        if (error) throw new Error("ورود ناموفق بود. دوباره تلاش کنید.");
+        await router.invalidate();
         toast.success("خوش آمدید 👋");
         navigate({ to: afterAuthPath, replace: true });
       } else {
+        if (!res.pendingToken) throw new Error("توکن ثبت‌نام دریافت نشد.");
+        setPendingToken(res.pendingToken);
         toast.message("حسابی با این شماره وجود ندارد", {
           description: "برای ادامه، ثبت‌نام را تکمیل کنید.",
         });
@@ -214,16 +216,29 @@ function AuthPage() {
       });
       return;
     }
+    if (!pendingToken) {
+      toast.error("توکن ثبت‌نام منقضی شده، دوباره کد بگیرید.");
+      setStep("phone");
+      return;
+    }
     setLoading(true);
     try {
-      await updateMyProfile({
+      const { emailOtp, email } = await completeSignupAndProvision({
         data: {
+          pendingToken,
           fullName: fullName.trim(),
           nationalId: nationalId.trim(),
           jobTitle: jobTitle.trim(),
           education: education || "",
         },
       });
+      const { error } = await supabase.auth.verifyOtp({
+        email,
+        token: emailOtp,
+        type: "magiclink",
+      });
+      if (error) throw new Error("ورود ناموفق بود. دوباره تلاش کنید.");
+      await router.invalidate();
       if (terms?.content) await acceptTerms({ data: { version: terms.version } });
       toast.success("ثبت‌نام با موفقیت انجام شد 👋");
       navigate({ to: afterAuthPath, replace: true });

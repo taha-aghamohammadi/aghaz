@@ -76,8 +76,13 @@ export const requestPhoneOtp = createServerFn({ method: "POST" })
 export const verifyPhoneOtp = createServerFn({ method: "POST" })
   .inputValidator((input: unknown) => verifySchema.parse(input))
   .handler(async ({ data }) => {
-    const { normalizePhone, consumeOtp, issueSessionToken, isRegisteredProfile } =
-      await import("@/lib/auth.server");
+    const {
+      normalizePhone,
+      consumeOtp,
+      issueSessionToken,
+      isRegisteredProfile,
+      createSignupToken,
+    } = await import("@/lib/auth.server");
     const phone = normalizePhone(data.phone);
     if (!phone) throw new Error("شماره موبایل معتبر نیست.");
 
@@ -90,14 +95,60 @@ export const verifyPhoneOtp = createServerFn({ method: "POST" })
 
     const registered = isRegisteredProfile(existingProfile);
     const details = await consumeOtp(phone, data.code);
-    const session = await issueSessionToken(phone, details);
-
+    if (registered) {
+      const session = await issueSessionToken(phone, details);
+      return {
+        registered,
+        telegramLinked: !!existingProfile?.telegram_id,
+        emailOtp: session.emailOtp,
+        email: session.email,
+      };
+    }
+    // new user: don't create auth.users yet, return pending token
+    const pendingToken = createSignupToken(phone);
     return {
       registered,
-      telegramLinked: !!existingProfile?.telegram_id,
-      emailOtp: session.emailOtp,
-      email: session.email,
+      telegramLinked: false,
+      pendingToken,
+    } as unknown as {
+      registered: boolean;
+      telegramLinked: boolean;
+      emailOtp: string;
+      email: string;
     };
+  });
+
+const signupProvisionSchema = z.object({
+  pendingToken: z.string().min(10),
+  fullName: z.string().trim().min(3).max(80),
+  nationalId: z.string().trim().min(10).max(20),
+  jobTitle: z.string().trim().max(80).optional().default(""),
+  education: z.string().trim().max(80).optional().default(""),
+});
+
+export const completeSignupAndProvision = createServerFn({ method: "POST" })
+  .inputValidator((input: unknown) => signupProvisionSchema.parse(input))
+  .handler(async ({ data }) => {
+    const { verifySignupToken, issueSessionToken } = await import("@/lib/auth.server");
+    const { normalizeNationalId } = await import("@/lib/national-id");
+    const phone = verifySignupToken(data.pendingToken);
+    const nid = normalizeNationalId(data.nationalId);
+    if (!nid) throw new Error("کد ملی معتبر نیست.");
+    // prevent duplicate if phone already registered (race / replay)
+    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+    const { data: existing } = await supabaseAdmin
+      .from("profiles")
+      .select("id")
+      .eq("phone", phone)
+      .maybeSingle();
+    if (existing) throw new Error("این شماره قبلاً ثبت شده است. وارد شوید.");
+    const session = await issueSessionToken(phone, {
+      fullName: data.fullName.trim(),
+      nationalId: nid,
+      jobTitle: data.jobTitle?.trim() ?? "",
+      education: data.education ?? "",
+    });
+    return { emailOtp: session.emailOtp, email: session.email };
   });
 
 export const updateMyProfile = createServerFn({ method: "POST" })

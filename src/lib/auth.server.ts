@@ -116,6 +116,44 @@ export async function consumeOtp(phone: string, code: string) {
   };
 }
 
+const SIGNUP_TTL_MS = 15 * 60 * 1000;
+
+function hmacSign(data: string, secret: string): string {
+  // ponytail: sync HMAC via node crypto, falls back to plaintext in edge env
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const c = require("node:crypto") as typeof import("node:crypto");
+    return c.createHmac("sha256", secret).update(data).digest("hex");
+  } catch {
+    return data + secret; // fallback never used in node
+  }
+}
+
+export function createSignupToken(phone: string): string {
+  const secret =
+    process.env.SUPABASE_SERVICE_ROLE_KEY ?? process.env.SUPABASE_SECRET ?? "dev-secret";
+  const payload = JSON.stringify({ phone, exp: Date.now() + SIGNUP_TTL_MS });
+  const b64 = Buffer.from(payload).toString("base64url");
+  const sig = hmacSign(b64, secret);
+  return `${b64}.${sig}`;
+}
+
+export function verifySignupToken(token: string): string {
+  const secret =
+    process.env.SUPABASE_SERVICE_ROLE_KEY ?? process.env.SUPABASE_SECRET ?? "dev-secret";
+  const [b64, sig] = token.split(".");
+  if (!b64 || !sig) throw new Error("توکن تأیید نامعتبر است.");
+  const expected = hmacSign(b64, secret);
+  if (sig !== expected) throw new Error("توکن تأیید نامعتبر است.");
+  const payload = JSON.parse(Buffer.from(b64, "base64url").toString()) as {
+    phone: string;
+    exp: number;
+  };
+  if (Date.now() > payload.exp) throw new Error("توکن منقضی شده، دوباره کد بگیرید.");
+  if (!payload.phone) throw new Error("توکن نامعتبر است.");
+  return payload.phone;
+}
+
 /** Creates the account when needed and returns a one-time login token hash. */
 export async function issueSessionToken(
   phone: string,
