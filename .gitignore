@@ -40,3 +40,13 @@ dist-ssr
 .cursor/
 .opencode/
 .ui-audit/
+
+# Generated / local artifacts (not committed)
+.playwright-mcp/
+.superpowers/
+.vercel/
+supabase/.temp/
+__pycache__/
+booking-dialog-*.png
+newIcon.png
+pics/
