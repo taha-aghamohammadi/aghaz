@@ -22,6 +22,7 @@ import { Route as AuthenticatedAdminDesksRouteImport } from './routes/_authentic
 import { Route as AuthenticatedAdminFinanceRouteImport } from './routes/_authenticated/admin/finance'
 import { Route as AuthenticatedAdminMembersRouteImport } from './routes/_authenticated/admin/members'
 import { Route as AuthenticatedAdminPricingRouteImport } from './routes/_authenticated/admin/pricing'
+import { Route as AuthenticatedAdminTermsRouteImport } from './routes/_authenticated/admin/terms'
 import { Route as ApiPaymentCallbackRouteImport } from './routes/api/payment/callback'
 
 const IndexRoute = IndexRouteImport.update({
@@ -92,6 +93,11 @@ const AuthenticatedAdminPricingRoute =
     path: '/pricing',
     getParentRoute: () => AuthenticatedAdminRouteRoute,
   } as any)
+const AuthenticatedAdminTermsRoute = AuthenticatedAdminTermsRouteImport.update({
+  id: '/terms',
+  path: '/terms',
+  getParentRoute: () => AuthenticatedAdminRouteRoute,
+} as any)
 const ApiPaymentCallbackRoute = ApiPaymentCallbackRouteImport.update({
   id: '/api/payment/callback',
   path: '/api/payment/callback',
@@ -110,6 +116,7 @@ export interface FileRoutesByFullPath {
   '/admin/finance': typeof AuthenticatedAdminFinanceRoute
   '/admin/members': typeof AuthenticatedAdminMembersRoute
   '/admin/pricing': typeof AuthenticatedAdminPricingRoute
+  '/admin/terms': typeof AuthenticatedAdminTermsRoute
   '/api/payment/callback': typeof ApiPaymentCallbackRoute
   '/admin/': typeof AuthenticatedAdminIndexRoute
 }
@@ -124,6 +131,7 @@ export interface FileRoutesByTo {
   '/admin/finance': typeof AuthenticatedAdminFinanceRoute
   '/admin/members': typeof AuthenticatedAdminMembersRoute
   '/admin/pricing': typeof AuthenticatedAdminPricingRoute
+  '/admin/terms': typeof AuthenticatedAdminTermsRoute
   '/api/payment/callback': typeof ApiPaymentCallbackRoute
   '/admin': typeof AuthenticatedAdminIndexRoute
 }
@@ -141,6 +149,7 @@ export interface FileRoutesById {
   '/_authenticated/admin/finance': typeof AuthenticatedAdminFinanceRoute
   '/_authenticated/admin/members': typeof AuthenticatedAdminMembersRoute
   '/_authenticated/admin/pricing': typeof AuthenticatedAdminPricingRoute
+  '/_authenticated/admin/terms': typeof AuthenticatedAdminTermsRoute
   '/api/payment/callback': typeof ApiPaymentCallbackRoute
   '/_authenticated/admin/': typeof AuthenticatedAdminIndexRoute
 }
@@ -158,6 +167,7 @@ export interface FileRouteTypes {
     | '/admin/finance'
     | '/admin/members'
     | '/admin/pricing'
+    | '/admin/terms'
     | '/api/payment/callback'
     | '/admin/'
   fileRoutesByTo: FileRoutesByTo
@@ -172,6 +182,7 @@ export interface FileRouteTypes {
     | '/admin/finance'
     | '/admin/members'
     | '/admin/pricing'
+    | '/admin/terms'
     | '/api/payment/callback'
     | '/admin'
   id:
@@ -188,6 +199,7 @@ export interface FileRouteTypes {
     | '/_authenticated/admin/finance'
     | '/_authenticated/admin/members'
     | '/_authenticated/admin/pricing'
+    | '/_authenticated/admin/terms'
     | '/api/payment/callback'
     | '/_authenticated/admin/'
   fileRoutesById: FileRoutesById
@@ -293,6 +305,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedAdminPricingRouteImport
       parentRoute: typeof AuthenticatedAdminRouteRoute
     }
+    '/_authenticated/admin/terms': {
+      id: '/_authenticated/admin/terms'
+      path: '/terms'
+      fullPath: '/admin/terms'
+      preLoaderRoute: typeof AuthenticatedAdminTermsRouteImport
+      parentRoute: typeof AuthenticatedAdminRouteRoute
+    }
     '/api/payment/callback': {
       id: '/api/payment/callback'
       path: '/api/payment/callback'
@@ -309,6 +328,7 @@ interface AuthenticatedAdminRouteRouteChildren {
   AuthenticatedAdminFinanceRoute: typeof AuthenticatedAdminFinanceRoute
   AuthenticatedAdminMembersRoute: typeof AuthenticatedAdminMembersRoute
   AuthenticatedAdminPricingRoute: typeof AuthenticatedAdminPricingRoute
+  AuthenticatedAdminTermsRoute: typeof AuthenticatedAdminTermsRoute
   AuthenticatedAdminIndexRoute: typeof AuthenticatedAdminIndexRoute
 }
 
@@ -319,6 +339,7 @@ const AuthenticatedAdminRouteRouteChildren: AuthenticatedAdminRouteRouteChildren
     AuthenticatedAdminFinanceRoute: AuthenticatedAdminFinanceRoute,
     AuthenticatedAdminMembersRoute: AuthenticatedAdminMembersRoute,
     AuthenticatedAdminPricingRoute: AuthenticatedAdminPricingRoute,
+    AuthenticatedAdminTermsRoute: AuthenticatedAdminTermsRoute,
     AuthenticatedAdminIndexRoute: AuthenticatedAdminIndexRoute,
   }
 

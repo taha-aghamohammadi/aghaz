@@ -265,6 +265,7 @@ export type Database = {
           phone: string;
           telegram_id: number | null;
           telegram_linked_at: string | null;
+          terms_accepted_version: number | null;
           updated_at: string;
         };
         Insert: {
@@ -278,6 +279,7 @@ export type Database = {
           phone?: string;
           telegram_id?: number | null;
           telegram_linked_at?: string | null;
+          terms_accepted_version?: number | null;
           updated_at?: string;
         };
         Update: {
@@ -291,7 +293,35 @@ export type Database = {
           phone?: string;
           telegram_id?: number | null;
           telegram_linked_at?: string | null;
+          terms_accepted_version?: number | null;
           updated_at?: string;
+        };
+        Relationships: [];
+      };
+      terms_settings: {
+        Row: {
+          id: string;
+          content: string;
+          version: number;
+          require_reconsent: boolean;
+          updated_at: string;
+          updated_by: string | null;
+        };
+        Insert: {
+          id?: string;
+          content?: string;
+          version?: number;
+          require_reconsent?: boolean;
+          updated_at?: string;
+          updated_by?: string | null;
+        };
+        Update: {
+          id?: string;
+          content?: string;
+          version?: number;
+          require_reconsent?: boolean;
+          updated_at?: string;
+          updated_by?: string | null;
         };
         Relationships: [];
       };

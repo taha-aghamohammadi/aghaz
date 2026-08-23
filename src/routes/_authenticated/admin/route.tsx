@@ -1,7 +1,7 @@
 import { createFileRoute, Link, Outlet, useRouterState } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
-import { BarChart3, CalendarCheck, Coins, LayoutGrid, ShieldAlert, Users, Wallet } from "lucide-react";
+import { BarChart3, CalendarCheck, Coins, FileText, LayoutGrid, ShieldAlert, Users, Wallet } from "lucide-react";
 import { getMyAccess } from "@/lib/admin.functions";
 import { Button } from "@/components/ui/button";
 import { logo } from "@/lib/site-assets";
@@ -17,6 +17,7 @@ const NAV = [
   { to: "/admin/pricing", label: "تعرفه‌ها", icon: Coins, exact: false },
   { to: "/admin/members", label: "کاربران", icon: Users, exact: false },
   { to: "/admin/finance", label: "حسابداری", icon: Wallet, exact: false },
+  { to: "/admin/terms", label: "قوانین", icon: FileText, exact: false },
 ] as const;
 
 function AdminLayout() {

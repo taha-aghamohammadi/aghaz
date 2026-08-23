@@ -15,6 +15,7 @@ import {
   unitPriceForType,
   type PricingRow,
 } from "@/lib/booking.service";
+import { DEFAULT_TERMS, mapTermsRow, TERMS_SETTINGS_ID, type TermsRow } from "@/lib/terms.service";
 
 export const getMyAccess = createServerFn({ method: "GET" })
   .middleware([requireSupabaseAuth])
@@ -366,6 +367,53 @@ export const updatePricingSettings = createServerFn({ method: "POST" })
       .update(patch)
       .eq("id", "00000000-0000-0000-0000-000000000001");
     if (error) throw new Error("ذخیره تعرفه‌ها ناموفق بود.");
+    return { ok: true };
+  });
+
+// ponytail: single-row terms like pricing_settings, version bumps only on content change
+export const getTermsSettings = createServerFn({ method: "GET" })
+  .middleware([requireSupabaseAuth])
+  .handler(async ({ context }) => {
+    await requireStaff(context.supabase, context.userId);
+    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+    const { data, error } = await supabaseAdmin
+      .from("terms_settings")
+      .select("*")
+      .eq("id", TERMS_SETTINGS_ID)
+      .maybeSingle();
+    if (error || !data) return { ...DEFAULT_TERMS, source: "defaults" as const };
+    return { ...mapTermsRow(data as TermsRow), source: "database" as const };
+  });
+
+export const updateTermsSettings = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((input: unknown) =>
+    z
+      .object({
+        content: z.string().trim().max(20000).optional(),
+        requireReconsent: z.boolean().optional(),
+      })
+      .parse(input),
+  )
+  .handler(async ({ data, context }) => {
+    await requireStaff(context.supabase, context.userId);
+    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+    const { data: cur } = await supabaseAdmin
+      .from("terms_settings")
+      .select("*")
+      .eq("id", TERMS_SETTINGS_ID)
+      .maybeSingle();
+    const patch: Record<string, unknown> = { updated_at: new Date().toISOString(), updated_by: context.userId };
+    let bump = false;
+    if (data.content !== undefined) {
+      const next = data.content.trim();
+      if (next !== (cur as TermsRow | null)?.content) bump = true;
+      patch.content = next;
+    }
+    if (data.requireReconsent !== undefined) patch.require_reconsent = data.requireReconsent;
+    if (bump) patch.version = ((cur as TermsRow | null)?.version ?? 0) + 1;
+    const { error } = await (supabaseAdmin.from("terms_settings") as unknown as { update: (p: Record<string, unknown>) => { eq: (c: string, v: string) => Promise<{ error: unknown }> } }).update(patch).eq("id", TERMS_SETTINGS_ID);
+    if (error) throw new Error("ذخیره قوانین ناموفق بود.");
     return { ok: true };
   });
 

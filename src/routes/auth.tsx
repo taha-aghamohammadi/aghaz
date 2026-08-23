@@ -23,6 +23,9 @@ import { OtpDemoBadge } from "@/components/site/OtpDemoBadge";
 import { isOtpDemoMode } from "@/lib/demo-mode";
 import { normalizeNationalId } from "@/lib/national-id";
 import { logo } from "@/lib/site-assets";
+import { Checkbox } from "@/components/ui/checkbox";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { getPublicTerms, acceptTerms } from "@/lib/terms.functions";
 
 export const Route = createFileRoute("/auth")({
   validateSearch: (search: Record<string, unknown>) => ({
@@ -77,7 +80,16 @@ function AuthPage() {
   const [telegramLinked, setTelegramLinked] = useState(false);
   const [otpChannel, setOtpChannel] = useState<"telegram" | "sms" | "none">("none");
   const [connectCard, setConnectCard] = useState(false);
+  const [termsAccepted, setTermsAccepted] = useState(false);
+  const [terms, setTerms] = useState<{ content: string; version: number } | null>(null);
+  const [showTerms, setShowTerms] = useState(false);
   const codeRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    void getPublicTerms().then((t) => {
+      if (t.content) setTerms(t);
+    });
+  }, []);
 
   const afterAuthPath = redirect || "/";
 
@@ -196,6 +208,10 @@ function AuthPage() {
   }
 
   async function completeSignup() {
+    if (terms?.content && !termsAccepted) {
+      toast.error("لطفاً قوانین را بپذیرید.");
+      return;
+    }
     if (fullName.trim().length < 3) {
       toast.error("نام و نام خانوادگی را کامل وارد کنید.");
       return;
@@ -216,6 +232,7 @@ function AuthPage() {
           education: education || "",
         },
       });
+      if (terms?.content) await acceptTerms({ data: { version: terms.version } });
       toast.success("ثبت‌نام با موفقیت انجام شد 👋");
       navigate({ to: afterAuthPath, replace: true });
     } catch (e) {
@@ -345,7 +362,19 @@ function AuthPage() {
                 </form>
 
                 <p className="mt-6 text-center text-[12px] leading-6 text-muted-foreground">
-                  با ادامه، قوانین و سیاست حفظ حریم خصوصی آغاز را می‌پذیرید.
+                  با ادامه،{" "}
+                  {terms?.content ? (
+                    <button
+                      type="button"
+                      onClick={() => setShowTerms(true)}
+                      className="text-primary underline underline-offset-4"
+                    >
+                      قوانین و شرایط استفاده
+                    </button>
+                  ) : (
+                    "قوانین و شرایط استفاده"
+                  )}{" "}
+                  آغاز را می‌پذیرید.
                 </p>
               </>
             ) : step === "otp" ? (
@@ -615,9 +644,29 @@ function AuthPage() {
                     </select>
                   </div>
 
+                  {terms?.content && (
+                    <div className="flex items-start gap-2 rounded-xl border border-hairline bg-surface/50 p-3">
+                      <Checkbox
+                        id="terms"
+                        checked={termsAccepted}
+                        onCheckedChange={(v) => setTermsAccepted(v === true)}
+                        className="mt-0.5"
+                      />
+                      <label htmlFor="terms" className="text-[13px] leading-6">
+                        <button
+                          type="button"
+                          onClick={() => setShowTerms(true)}
+                          className="text-primary underline underline-offset-4"
+                        >
+                          قوانین و شرایط استفاده
+                        </button>{" "}
+                        را خواندم و می‌پذیرم.
+                      </label>
+                    </div>
+                  )}
                   <Button
                     type="submit"
-                    disabled={loading}
+                    disabled={loading || (!!terms?.content && !termsAccepted)}
                     className="h-11 w-full rounded-full text-[14px]"
                   >
                     {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : "ثبت‌نام و ادامه"}
@@ -638,6 +687,14 @@ function AuthPage() {
           </div>
         </main>
       </div>
+      <Dialog open={showTerms} onOpenChange={setShowTerms}>
+        <DialogContent className="max-h-[80vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>قوانین و شرایط استفاده</DialogTitle>
+          </DialogHeader>
+          <div className="whitespace-pre-wrap text-[13.5px] leading-7">{terms?.content}</div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
