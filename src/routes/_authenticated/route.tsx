@@ -2,6 +2,7 @@ import { createFileRoute, Outlet, redirect } from "@tanstack/react-router";
 import { supabase } from "@/integrations/supabase/client";
 import { TermsGate } from "@/components/site/TermsGate";
 import { TelegramBanner } from "@/components/site/TelegramBanner";
+import { ProfileCompletionGate } from "@/components/site/ProfileCompletionGate";
 
 export const Route = createFileRoute("/_authenticated")({
   ssr: false,
@@ -11,9 +12,11 @@ export const Route = createFileRoute("/_authenticated")({
     return { user: data.user };
   },
   component: () => (
-    <TermsGate>
-      <TelegramBanner />
-      <Outlet />
-    </TermsGate>
+    <ProfileCompletionGate>
+      <TermsGate>
+        <TelegramBanner />
+        <Outlet />
+      </TermsGate>
+    </ProfileCompletionGate>
   ),
 });
