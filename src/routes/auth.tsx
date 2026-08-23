@@ -18,7 +18,6 @@ import { Label } from "@/components/ui/label";
 import { Toaster } from "@/components/ui/sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { requestPhoneOtp, updateMyProfile, verifyPhoneOtp } from "@/lib/auth.functions";
-import { createTelegramLink } from "@/lib/telegram.functions";
 import { OtpDemoBadge } from "@/components/site/OtpDemoBadge";
 import { isOtpDemoMode } from "@/lib/demo-mode";
 import { normalizeNationalId } from "@/lib/national-id";
@@ -79,7 +78,6 @@ function AuthPage() {
   const [demoCode, setDemoCode] = useState<string | null>(null);
   const [telegramLinked, setTelegramLinked] = useState(false);
   const [otpChannel, setOtpChannel] = useState<"telegram" | "sms" | "none">("none");
-  const [connectCard, setConnectCard] = useState(false);
   const [termsAccepted, setTermsAccepted] = useState(false);
   const [terms, setTerms] = useState<{ content: string; version: number } | null>(null);
   const [showTerms, setShowTerms] = useState(false);
@@ -112,7 +110,6 @@ function AuthPage() {
     setSeconds(0);
     setTelegramLinked(false);
     setOtpChannel("none");
-    setConnectCard(false);
   }
 
   async function sendCode(forceChannel?: "sms" | "telegram") {
@@ -180,18 +177,13 @@ function AuthPage() {
 
       setTelegramLinked(linked);
       if (registered) {
-        if (linked) {
-          toast.success("خوش آمدید 👋");
-          navigate({ to: afterAuthPath, replace: true });
-        } else {
-          setConnectCard(true);
-        }
+        toast.success("خوش آمدید 👋");
+        navigate({ to: afterAuthPath, replace: true });
       } else {
         toast.message("حسابی با این شماره وجود ندارد", {
           description: "برای ادامه، ثبت‌نام را تکمیل کنید.",
         });
         setStep("signup");
-        setConnectCard(true);
       }
     } catch (e) {
       if (e instanceof TypeError && /fetch/i.test(e.message)) {
@@ -242,29 +234,6 @@ function AuthPage() {
     }
   }
 
-  async function connectTelegram() {
-    try {
-      const res = await createTelegramLink();
-      window.open(res.url, "_blank", "noopener");
-      toast.success("لینک اتصال باز شد.", {
-        description: "در تلگرام روی Start بزنید تا حساب متصل شود.",
-        duration: 8000,
-      });
-    } catch (e) {
-      toast.error(e instanceof Error ? e.message : "اتصال تلگرام ناموفق بود.");
-    }
-  }
-
-  function continueAfterConnect() {
-    setConnectCard(false);
-    toast.success("خوش آمدید 👋");
-    navigate({ to: afterAuthPath, replace: true });
-  }
-
-  function dismissConnectCard() {
-    setConnectCard(false);
-  }
-
   return (
     <div className="min-h-screen bg-background">
       <Toaster position="top-center" />
@@ -296,9 +265,7 @@ function AuthPage() {
               <ShieldCheck className="h-4 w-4 text-primary" />
               ورود شما با کد یکبار مصرف محافظت می‌شود.
             </div>
-            {isOtpDemoMode() && (step === "phone" || step === "otp") && (
-              <OtpDemoBadge className="mt-4" />
-            )}
+            {demoCode && <OtpDemoBadge className="mt-4" />}
           </div>
         </aside>
 
@@ -316,11 +283,6 @@ function AuthPage() {
               <>
                 <div className="mb-7">
                   <h1 className="text-[26px] font-semibold tracking-tight">ورود یا ثبت‌نام</h1>
-                  {isOtpDemoMode() && (
-                    <div className="mt-3">
-                      <OtpDemoBadge />
-                    </div>
-                  )}
                   <p className="mt-2 text-[13.5px] leading-6 text-muted-foreground">
                     شماره موبایل خود را وارد کنید. کد تأیید برایتان ارسال می‌شود.
                   </p>
@@ -386,11 +348,6 @@ function AuthPage() {
                   <h1 className="text-[26px] font-semibold tracking-tight">
                     کد تأیید را وارد کنید
                   </h1>
-                  {isOtpDemoMode() && (
-                    <div className="mt-3">
-                      <OtpDemoBadge />
-                    </div>
-                  )}
                   <p className="mt-2 text-[13.5px] leading-6 text-muted-foreground">
                     {telegramLinked && otpChannel === "telegram" ? (
                       <>کد ۴ رقمی به تلگرام شما ارسال شد.</>
@@ -406,7 +363,7 @@ function AuthPage() {
                   </p>
                 </div>
 
-                {demoCode ? (
+                {demoCode && (
                   <div className="mb-5 rounded-2xl border border-warning/35 bg-warning/10 px-4 py-4">
                     <div className="mb-2 flex items-center gap-2">
                       <OtpDemoBadge className="border-0 bg-transparent px-0 py-0" />
@@ -421,11 +378,7 @@ function AuthPage() {
                       {demoCode}
                     </p>
                   </div>
-                ) : isOtpDemoMode() ? (
-                  <div className="mb-5 rounded-xl border border-hairline bg-surface px-4 py-3 text-[12.5px] leading-6 text-muted-foreground">
-                    در حالت دمو، کد ورود پس از درخواست در همین بخش نمایش داده می‌شود.
-                  </div>
-                ) : null}
+                )}
 
                 <form
                   className="space-y-4"
@@ -487,32 +440,6 @@ function AuthPage() {
                     </Button>
                   </div>
                 )}
-
-                {connectCard && (
-                  <div className="mt-4 rounded-2xl border border-primary/30 bg-primary/5 px-4 py-4">
-                    <p className="text-[13.5px] font-medium text-foreground">به تلگرام متصل شوید</p>
-                    <p className="mt-1.5 text-[12.5px] leading-6 text-muted-foreground">
-                      برای دریافت کدها و اعلان‌ها در تلگرام، حساب خود را همین حالا متصل کنید. یکبار
-                      اتصال کافی است — از این پس کد ورود در تلگرام ارسال می‌شود.
-                    </p>
-                    <Button
-                      type="button"
-                      variant="outline"
-                      disabled={loading}
-                      onClick={() => void connectTelegram()}
-                      className="mt-3 h-9 w-full rounded-full text-[13px]"
-                    >
-                      اتصال تلگرام
-                    </Button>
-                    <button
-                      type="button"
-                      onClick={continueAfterConnect}
-                      className="mt-2 w-full text-center text-[12.5px] text-muted-foreground transition hover:text-foreground"
-                    >
-                      بعداً
-                    </button>
-                  </div>
-                )}
               </>
             ) : (
               <>
@@ -522,32 +449,6 @@ function AuthPage() {
                     شماره موبایل شما تأیید شد. برای رزرو میز، اطلاعات خود را وارد کنید.
                   </p>
                 </div>
-
-                {connectCard && (
-                  <div className="mb-5 rounded-2xl border border-primary/30 bg-primary/5 px-4 py-4">
-                    <p className="text-[13.5px] font-medium text-foreground">به تلگرام متصل شوید</p>
-                    <p className="mt-1.5 text-[12.5px] leading-6 text-muted-foreground">
-                      برای دریافت کدها و اعلان‌ها در تلگرام، حساب خود را همین حالا متصل کنید. یکبار
-                      اتصال کافی است — از این پس کد ورود در تلگرام ارسال می‌شود.
-                    </p>
-                    <Button
-                      type="button"
-                      variant="outline"
-                      disabled={loading}
-                      onClick={() => void connectTelegram()}
-                      className="mt-3 h-9 w-full rounded-full text-[13px]"
-                    >
-                      اتصال تلگرام
-                    </Button>
-                    <button
-                      type="button"
-                      onClick={dismissConnectCard}
-                      className="mt-2 w-full text-center text-[12.5px] text-muted-foreground transition hover:text-foreground"
-                    >
-                      بعداً
-                    </button>
-                  </div>
-                )}
 
                 <form
                   className="space-y-4"

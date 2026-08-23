@@ -58,9 +58,8 @@ export const requestPhoneOtp = createServerFn({ method: "POST" })
       console.error("[OTP] send failed:", e);
     }
 
-    const isDev = process.env.NODE_ENV !== "production";
     const demoMode = process.env.OTP_DEMO_MODE === "true";
-    const showDemoCode = !smsSent && (isDev || demoMode);
+    const showDemoCode = !smsSent && demoMode;
 
     return {
       phone,
